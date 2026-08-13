@@ -34,7 +34,7 @@ npm install
 npm run dev:mp-weixin
 ```
 
-然后使用微信开发者工具打开 `dist/dev/mp-weixin`。正式运行前，请在 `src/manifest.json` 中填写微信小程序 AppID。
+然后在 [`.env`](file:///Users/dongyuanwai/code/codex/love-archive/.env) 中填写 `VITE_MP_WEIXIN_APP_ID`，再使用微信开发者工具打开 `dist/dev/mp-weixin`。运行 `dev` 或 `build` 时，`vite.config.ts` 会把这个值同步到 `src/manifest.json` 的 `mp-weixin.appid`。
 
 ## 检查与构建
 
