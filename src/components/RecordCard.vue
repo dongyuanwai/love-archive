@@ -37,6 +37,7 @@ const store = useArchiveStore()
 
     <view class="record__footer" @tap.stop>
       <button
+        v-if="record.authorId === 'partner'"
         class="action action--response"
         :class="[
           `action--${record.mood}`,
@@ -83,7 +84,7 @@ const store = useArchiveStore()
 .record__content { display: block; margin: 24rpx 0 22rpx; color: #473b38; font-size: 28rpx; line-height: 1.78; }
 .record__footer { gap: 16rpx; padding-top: 19rpx; border-top: 1rpx solid #f1e8e3; }
 .action { gap: 8rpx; min-height: 58rpx; flex: 1; justify-content: center; border-radius: 18rpx; background: transparent; color: #786b67; font-size: 23rpx; }
-.action--response { background: #fbf4ef; }
+.action--response { min-height: 50rpx; padding: 0 18rpx; flex: 0 0 auto; border-radius: 16rpx; background: #fbf4ef; font-size: 21rpx; }
 .action--sad { background: #f0f5f9; }
 .action--happy.action--active { background: #fff0e8; color: #c65f52; font-weight: 650; }
 .action--sad.action--active { background: #e9f1f7; color: #5f7f9b; font-weight: 650; }

@@ -3,19 +3,42 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
 import { useArchiveStore } from '@/stores/archive'
+import { acceptRelationshipInvite, createRelationshipInvite, getCurrentRelationship, unbindCurrentRelationship } from '@/api/relationships'
 
 const store = useArchiveStore()
 const mode = ref<'invite' | 'enter'>('invite')
 const code = ref('')
 const redirectingToLogin = ref(false)
+const actionLoading = ref(false)
 
-onShow(() => {
-  if (store.user.isLoggedIn || redirectingToLogin.value) return
-  redirectingToLogin.value = true
-  uni.redirectTo({
-    url: '/pages/login/index?target=binding',
-    complete: () => { redirectingToLogin.value = false },
-  })
+const generateInvite = async () => {
+  actionLoading.value = true
+  try {
+    store.setInvite(await createRelationshipInvite())
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '邀请码生成失败', icon: 'none' })
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+onShow(async () => {
+  if (!store.user.isLoggedIn) {
+    if (redirectingToLogin.value) return
+    redirectingToLogin.value = true
+    uni.redirectTo({
+      url: '/pages/login/index?target=binding',
+      complete: () => { redirectingToLogin.value = false },
+    })
+    return
+  }
+  try {
+    const current = await getCurrentRelationship()
+    store.setCurrentRelationship(current)
+    if (!current.active && !store.inviteCode) await generateInvite()
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '绑定状态加载失败', icon: 'none' })
+  }
 })
 
 const copyCode = () => {
@@ -23,7 +46,7 @@ const copyCode = () => {
 }
 
 const join = () => {
-  if (code.value.trim().length < 4) {
+  if (!/^LOVE-[A-Z2-9]{6}$/.test(code.value.trim().toUpperCase())) {
     uni.showToast({ title: '请输入有效邀请码', icon: 'none' })
     return
   }
@@ -31,10 +54,18 @@ const join = () => {
     title: '确认共同存档？',
     content: '绑定后，双方可以查看绑定期间对彼此公开的记录和情绪统计。',
     confirmText: '确认绑定', confirmColor: '#d87263',
-    success: (result) => {
-      if (result.confirm && store.bindWithCode(code.value)) {
+    success: async (result) => {
+      if (!result.confirm) return
+      actionLoading.value = true
+      try {
+        await acceptRelationshipInvite(code.value)
+        store.setCurrentRelationship(await getCurrentRelationship())
         uni.showToast({ title: '绑定成功', icon: 'success' })
         mode.value = 'invite'
+      } catch (error) {
+        uni.showToast({ title: error instanceof Error ? error.message : '绑定失败', icon: 'none' })
+      } finally {
+        actionLoading.value = false
       }
     },
   })
@@ -45,10 +76,19 @@ const unbind = () => {
     title: '确认解除绑定？',
     content: '解除后，你们会立即无法查看彼此的记录和互动。对方过去的互动只会保留在你自己的存档中。',
     confirmText: '解除绑定', confirmColor: '#bd5147',
-    success: (result) => {
+    success: async (result) => {
       if (!result.confirm) return
-      store.unbind()
-      uni.showToast({ title: '已解除绑定', icon: 'none' })
+      actionLoading.value = true
+      try {
+        await unbindCurrentRelationship()
+        store.unbind()
+        await generateInvite()
+        uni.showToast({ title: '已解除绑定', icon: 'none' })
+      } catch (error) {
+        uni.showToast({ title: error instanceof Error ? error.message : '解除绑定失败', icon: 'none' })
+      } finally {
+        actionLoading.value = false
+      }
     },
   })
 }
@@ -67,7 +107,7 @@ const unbind = () => {
         <view class="bond-avatars"><view class="bond-avatar bond-avatar--me"><image v-if="store.user.avatarUrl" class="user-avatar-image" :src="store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ store.user.initial }}</text></view><view class="bond-line"><AppIcon name="heart" :size="17" filled color="#c96a5c" /></view><view class="bond-avatar bond-avatar--partner">{{ store.activeRelationship.partnerInitial }}</view></view>
         <text class="bond-title">{{ store.user.name }} & {{ store.activeRelationship.partnerName }}</text>
         <text class="bond-desc">从 {{ store.activeRelationship.startedAt }} 开始共同存档</text>
-        <view class="bond-stats"><view><text>56</text><span>陪伴天数</span></view><i/><view><text>19</text><span>共同可见记录</span></view><i/><view><text>27</text><span>温柔回应</span></view></view>
+        <view class="bond-stats"><view><text>{{ store.activeRelationship.daysTogether || 1 }}</text><span>陪伴天数</span></view><i/><view><text>{{ store.activeRelationship.sharedMoodCount || 0 }}</text><span>共同可见记录</span></view><i/><view><text>{{ store.activeRelationship.responseCount || 0 }}</text><span>温柔回应</span></view></view>
       </view>
       <view class="rules card">
         <text class="rules__title">这段关系里的隐私规则</text>
@@ -86,14 +126,14 @@ const unbind = () => {
         <text class="invite-label">你的专属邀请码</text>
         <text class="invite-code">{{ store.inviteCode }}</text>
         <text class="invite-desc">邀请码 24 小时内有效，仅能使用一次</text>
-        <button class="primary-button" @tap="copyCode">复制邀请码</button>
-        <button class="text-button" @tap="store.regenerateInviteCode">重新生成</button>
+        <button class="primary-button" :disabled="!store.inviteCode" @tap="copyCode">复制邀请码</button>
+        <button class="text-button" :loading="actionLoading" :disabled="actionLoading" @tap="generateInvite">重新生成</button>
       </view>
       <view v-else class="enter-card card">
         <view class="invite-icon"><AppIcon name="heart" :size="28" /></view>
         <text class="invite-label">输入 TA 发来的邀请码</text>
-        <input v-model="code" class="code-input" maxlength="10" placeholder="例如 LOV826" />
-        <button class="primary-button" @tap="join">确认并绑定</button>
+        <input v-model="code" class="code-input" maxlength="11" placeholder="例如 LOVE-A7K9Q2" />
+        <button class="primary-button" :loading="actionLoading" :disabled="actionLoading" @tap="join">确认并绑定</button>
       </view>
       <view class="before-bind card"><text>绑定前请放心</text><view><i/>以前的记录不会自动向 TA 开放</view><view><i/>以后发布时仍能选择“仅自己可见”</view><view><i/>每个人同时只能绑定一位对象</view></view>
     </template>

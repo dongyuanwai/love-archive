@@ -21,7 +21,7 @@ const types: Record<AppIconName, string> = {
   lock: 'locked',
   chevron: 'right',
   calendar: 'calendar',
-  trend: 'arrowup',
+  trend: 'arrow-up',
   link: 'link',
   plus: 'plusempty',
   more: 'more-filled',
@@ -38,5 +38,15 @@ const type = computed(() => props.name === 'heart' && props.filled ? 'heart-fill
 </template>
 
 <style scoped>
-.app-icon { display: inline-flex; flex: none; line-height: 1; }
+.app-icon {
+  display: inline-flex !important;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  vertical-align: middle;
+  line-height: 1 !important;
+}
 </style>

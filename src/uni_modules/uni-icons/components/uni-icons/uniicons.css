@@ -1,4 +1,12 @@
 
+@font-face {
+  font-family: "uniicons";
+  src: url("/static/fonts/uniicons.ttf") format("truetype");
+  font-style: normal;
+  font-weight: normal;
+  font-display: block;
+}
+
 .uniui-cart-filled:before {
   content: "\e6d0";
 }

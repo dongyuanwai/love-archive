@@ -12,9 +12,9 @@
 - 对象绑定：邀请码、绑定规则、解绑流程
 - 微信身份：通过 `uni.login` 获取临时凭证，由用户主动选择头像并确认昵称
 
-所有数据暂存在 Pinia 内存中，刷新或重新启动后恢复为演示数据。后续接后端时可保留页面结构和领域类型，替换 Store 内的数据操作。
+登录已接入独立 NestJS 后端，Token 保存在微信本地缓存。心情、关系、互动和统计数据暂时仍由 Pinia 管理，后续按模块逐步替换。
 
-微信头像与昵称会暂存在微信本地缓存；头像目前仍是小程序临时文件，正式上线前需上传到后端或云存储。`uni.login` 的临时凭证也需要后端换取 OpenID 和正式会话。
+微信头像与昵称会暂存在微信本地缓存；头像目前仍是小程序临时文件，正式上线前需上传到后端或 OSS。微信登录凭证已交给后端换取身份和正式会话。
 
 ## 已确认的 MVP 规则
 
@@ -34,7 +34,9 @@ npm install
 npm run dev:mp-weixin
 ```
 
-然后在 [`.env`](file:///Users/dongyuanwai/code/codex/love-archive/.env) 中填写 `VITE_MP_WEIXIN_APP_ID`，再使用微信开发者工具打开 `dist/dev/mp-weixin`。运行 `dev` 或 `build` 时，`vite.config.ts` 会把这个值同步到 `src/manifest.json` 的 `mp-weixin.appid`。
+然后在 `.env` 中填写 `VITE_MP_WEIXIN_APP_ID` 和 `VITE_API_BASE_URL`，再使用微信开发者工具打开 `dist/dev/mp-weixin`。运行 `dev` 或 `build` 时，`vite.config.ts` 会把 AppID 同步到 `src/manifest.json`。
+
+本地后端未配置微信 AppSecret 时，可以保持 `VITE_USE_DEV_WECHAT_LOGIN=true`，登录会稳定映射到 `VITE_DEV_WECHAT_USER` 指定的开发用户。修改 `.env` 后必须重启 uni-app 编译进程。正式环境必须关闭此选项，并使用 HTTPS API 域名。
 
 ## 检查与构建
 
@@ -45,7 +47,7 @@ npm run build:mp-weixin
 
 ## 首版未接入
 
-- 微信真实登录
+- 头像上传与永久地址
 - 后端数据库与文件存储
 - 内容安全审核
 - 真实消息通知

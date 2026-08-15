@@ -6,6 +6,8 @@ import MoodMark from '@/components/MoodMark.vue'
 import { useArchiveStore } from '@/stores/archive'
 import type { MoodKind, Visibility } from '@/types/domain'
 import { todayString } from '@/utils/date'
+import { createMood } from '@/api/moods'
+import { syncTabBarSelection } from '@/utils/tab-bar'
 
 const store = useArchiveStore()
 const mood = ref<MoodKind>('happy')
@@ -16,6 +18,7 @@ const visibility = ref<Visibility>('partner')
 const allowComments = ref(true)
 const redirectingToLogin = ref(false)
 const loginPrompted = ref(false)
+const publishing = ref(false)
 
 const emotionOptions: Record<MoodKind, string[]> = {
   happy: ['愉快', '安心', '期待', '感动', '兴奋', '被爱'],
@@ -23,9 +26,10 @@ const emotionOptions: Record<MoodKind, string[]> = {
 }
 
 const characterCount = computed(() => content.value.length)
-const canPublish = computed(() => content.value.trim().length > 0 && characterCount.value <= 1000)
+const canPublish = computed(() => content.value.trim().length > 0 && characterCount.value <= 1000 && !publishing.value)
 
 onShow(() => {
+  syncTabBarSelection()
   if (!store.user.isLoggedIn) {
     if (loginPrompted.value) {
       loginPrompted.value = false
@@ -55,7 +59,7 @@ const toggleComments = (event: unknown) => {
   allowComments.value = (event as { detail: { value: boolean } }).detail.value
 }
 
-const publish = () => {
+const publish = async () => {
   if (!store.user.isLoggedIn) {
     uni.navigateTo({ url: '/pages/login/index?target=create' })
     return
@@ -64,18 +68,30 @@ const publish = () => {
     uni.showToast({ title: '写下一点此刻的心情吧', icon: 'none' })
     return
   }
-  store.addRecord({
-    mood: mood.value,
-    emotion: emotion.value,
-    content: content.value.trim(),
-    recordDate: recordDate.value,
-    visibility: visibility.value,
-    allowComments: visibility.value === 'partner' && allowComments.value,
-  })
-  content.value = ''
-  recordDate.value = todayString()
-  uni.showToast({ title: '这一刻已被收藏', icon: 'success' })
-  setTimeout(() => uni.switchTab({ url: '/pages/archive/index' }), 650)
+  publishing.value = true
+  try {
+    const record = await createMood({
+      mood: mood.value,
+      emotion: emotion.value,
+      content: content.value.trim(),
+      recordDate: recordDate.value,
+      visibility: visibility.value,
+      allowComments: visibility.value === 'partner' && allowComments.value,
+    }, store.user.id)
+    store.prependRecord(record)
+    content.value = ''
+    recordDate.value = todayString()
+    uni.showToast({ title: '这一刻已被收藏', icon: 'success' })
+    setTimeout(() => uni.switchTab({ url: '/pages/archive/index' }), 650)
+  } catch (error) {
+    uni.showToast({
+      title: error instanceof Error ? error.message : '发布失败，请稍后重试',
+      icon: 'none',
+      duration: 2500,
+    })
+  } finally {
+    publishing.value = false
+  }
 }
 </script>
 
@@ -134,7 +150,7 @@ const publish = () => {
       </view>
     </view>
 
-    <button class="primary-button publish" :class="{ 'publish--disabled': !canPublish }" @tap="publish">收藏这一刻</button>
+    <button class="primary-button publish" :class="{ 'publish--disabled': !canPublish }" :loading="publishing" :disabled="publishing" @tap="publish">{{ publishing ? '正在收藏…' : '收藏这一刻' }}</button>
     <text class="privacy-note"><AppIcon name="lock" :size="13" />你的私密记录不会出现在 TA 的报告里</text>
   </view>
 </template>

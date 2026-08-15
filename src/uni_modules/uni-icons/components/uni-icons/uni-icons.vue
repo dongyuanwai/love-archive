@@ -98,8 +98,26 @@
 
 	/* #endif */
 	.uni-icons {
+		display: inline-flex;
+		width: 1em;
+		height: 1em;
+		flex: none;
+		align-items: center;
+		justify-content: center;
+		box-sizing: border-box;
 		font-family: uniicons;
 		text-decoration: none;
 		text-align: center;
+		vertical-align: middle;
+		line-height: 1;
+	}
+
+	.uni-icons::before {
+		display: flex;
+		width: 100%;
+		height: 100%;
+		align-items: center;
+		justify-content: center;
+		line-height: 1;
 	}
 </style>

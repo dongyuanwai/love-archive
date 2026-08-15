@@ -3,6 +3,7 @@ export type Visibility = 'partner' | 'private'
 export type AuthorId = 'me' | 'partner'
 
 export interface UserProfile {
+  id?: string
   name: string
   initial: string
   avatarUrl: string
@@ -42,4 +43,7 @@ export interface Relationship {
   partnerInitial: string
   startedAt: string
   active: boolean
+  daysTogether?: number
+  sharedMoodCount?: number
+  responseCount?: number
 }

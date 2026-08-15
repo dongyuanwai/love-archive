@@ -5,6 +5,9 @@ import AppIcon from '@/components/AppIcon.vue'
 import MoodMark from '@/components/MoodMark.vue'
 import { useArchiveStore } from '@/stores/archive'
 import { formatDateTime } from '@/utils/date'
+import { getMoodDetail } from '@/api/moods'
+import { addReaction, removeReaction } from '@/api/reactions'
+import { createComment, editComment as requestEditComment } from '@/api/comments'
 
 const store = useArchiveStore()
 const recordId = ref('')
@@ -12,14 +15,46 @@ const comment = ref('')
 const editingCommentId = ref('')
 const editingComment = ref('')
 const record = computed(() => store.recordById(recordId.value))
+const detailLoading = ref(true)
+const detailError = ref('')
+const reactionLoading = ref(false)
+const commentSaving = ref(false)
 
-onLoad((query) => { recordId.value = String(query?.id || '') })
+const loadDetail = async () => {
+  if (!recordId.value) {
+    detailError.value = '缺少心情记录 ID'
+    detailLoading.value = false
+    return
+  }
+  detailLoading.value = true
+  detailError.value = ''
+  try {
+    store.upsertRecord(await getMoodDetail(recordId.value, store.user.id))
+  } catch (error) {
+    detailError.value = error instanceof Error ? error.message : '心情详情加载失败'
+  } finally {
+    detailLoading.value = false
+  }
+}
 
-const submitComment = () => {
+onLoad((query) => {
+  recordId.value = String(query?.id || '')
+  void loadDetail()
+})
+
+const submitComment = async () => {
   if (!comment.value.trim()) return
-  store.addComment(recordId.value, comment.value)
-  comment.value = ''
-  uni.showToast({ title: '回应已送达', icon: 'none' })
+  commentSaving.value = true
+  try {
+    await createComment(recordId.value, comment.value)
+    comment.value = ''
+    await loadDetail()
+    uni.showToast({ title: '回应已送达', icon: 'none' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '评论发送失败', icon: 'none' })
+  } finally {
+    commentSaving.value = false
+  }
 }
 
 const startEditComment = (commentId: string, content: string) => {
@@ -32,20 +67,49 @@ const cancelEditComment = () => {
   editingComment.value = ''
 }
 
-const saveComment = (commentId: string) => {
+const saveComment = async (commentId: string) => {
   if (!editingComment.value.trim()) {
     uni.showToast({ title: '评论内容不能为空', icon: 'none' })
     return
   }
-  if (store.editComment(recordId.value, commentId, editingComment.value)) {
+  commentSaving.value = true
+  try {
+    await requestEditComment(commentId, editingComment.value)
+    await loadDetail()
     cancelEditComment()
     uni.showToast({ title: '评论已更新', icon: 'none' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '评论修改失败', icon: 'none' })
+  } finally {
+    commentSaving.value = false
+  }
+}
+
+const toggleReaction = async () => {
+  if (!record.value || reactionLoading.value) return
+  if (record.value.authorId === 'me') {
+    uni.showToast({ title: '这是你自己的心情', icon: 'none' })
+    return
+  }
+  reactionLoading.value = true
+  try {
+    const active = record.value.mood === 'happy' ? record.value.likedByPartner : record.value.huggedByPartner
+    if (active) await removeReaction(record.value.id)
+    else await addReaction(record.value.id)
+    await loadDetail()
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '回应失败', icon: 'none' })
+  } finally {
+    reactionLoading.value = false
   }
 }
 </script>
 
 <template>
-  <view v-if="record" class="page-shell detail-page">
+  <view v-if="detailLoading" class="page-shell">
+    <view class="empty-state card"><text class="empty-state__title">正在打开这份心情</text><text class="empty-state__desc">请稍等一下。</text></view>
+  </view>
+  <view v-else-if="record" class="page-shell detail-page">
     <view class="detail-card card" :class="`detail-card--${record.mood}`">
       <view class="detail-card__top">
         <view class="author">
@@ -62,14 +126,16 @@ const saveComment = (commentId: string) => {
       <view class="visibility"><AppIcon :name="record.visibility === 'private' ? 'lock' : 'heart'" :size="14" /><text>{{ record.visibility === 'private' ? '仅自己可见' : `我和 ${store.activeRelationship?.partnerName || 'TA'} 可见` }}</text></view>
     </view>
 
-    <view class="reaction-card card">
+    <view v-if="record.authorId === 'partner'" class="reaction-card card">
       <button
         class="reaction"
         :class="[
           `reaction--${record.mood}`,
           { active: record.mood === 'happy' ? record.likedByPartner : record.huggedByPartner },
         ]"
-        @tap="store.toggleMoodResponse(record.id)"
+        :loading="reactionLoading"
+        :disabled="reactionLoading"
+        @tap="toggleReaction"
       >
         <view class="reaction__icon">
           <AppIcon
@@ -110,7 +176,7 @@ const saveComment = (commentId: string) => {
             <input v-model="editingComment" class="comment-editor__input" maxlength="200" focus />
             <view class="comment-editor__actions">
               <button class="comment-editor__cancel" @tap="cancelEditComment">取消</button>
-              <button class="comment-editor__save" :class="{ disabled: !editingComment.trim() }" @tap="saveComment(item.id)">保存</button>
+              <button class="comment-editor__save" :class="{ disabled: !editingComment.trim() }" :loading="commentSaving" :disabled="commentSaving" @tap="saveComment(item.id)">保存</button>
             </view>
           </view>
           <text v-else class="comment-text">{{ item.content }}</text>
@@ -121,11 +187,11 @@ const saveComment = (commentId: string) => {
 
     <view v-if="record.allowComments && record.visibility === 'partner'" class="comment-box card">
       <input v-model="comment" class="comment-input" maxlength="200" placeholder="写一句温柔的回应……" />
-      <button class="send-button" :class="{ disabled: !comment.trim() }" @tap="submitComment">发送</button>
+      <button class="send-button" :class="{ disabled: !comment.trim() }" :loading="commentSaving" :disabled="commentSaving" @tap="submitComment">发送</button>
     </view>
     <view v-else class="comments-closed"><AppIcon name="lock" :size="14" /><text>{{ record.visibility === 'private' ? '私密记录只有自己能看到' : '这条记录已关闭评论' }}</text></view>
   </view>
-  <view v-else class="page-shell"><view class="empty-state card"><text class="empty-state__title">记录暂时无法查看</text><text class="empty-state__desc">请返回心情存档后重新进入。</text></view></view>
+  <view v-else class="page-shell"><view class="empty-state card"><text class="empty-state__title">记录暂时无法查看</text><text class="empty-state__desc">{{ detailError || '请返回心情存档后重新进入。' }}</text><button class="detail-retry" @tap="loadDetail">重新加载</button></view></view>
 </template>
 
 <style scoped lang="scss">
@@ -146,15 +212,15 @@ const saveComment = (commentId: string) => {
 .backfill { margin-top: 7rpx; color: #998985; font-size: 21rpx; }
 .detail-content { display: block; font-size: 31rpx; line-height: 1.9; }
 .visibility { gap: 7rpx; margin-top: 28rpx; color: #8e7e7a; font-size: 22rpx; }
-.reaction-card { margin-top: 22rpx; padding: 16rpx; }
-.reaction { gap: 18rpx; min-height: 110rpx; padding: 0 24rpx; justify-content: flex-start; border-radius: 22rpx; background: #fff5ef; color: #8d554c; text-align: left; }
+.reaction-card { margin-top: 22rpx; padding: 12rpx; }
+.reaction { gap: 14rpx; min-height: 84rpx; padding: 0 18rpx; justify-content: flex-start; border-radius: 19rpx; background: #fff5ef; color: #8d554c; text-align: left; }
 .reaction--sad { background: #eef4f8; color: #5e7890; }
-.reaction__icon { display: flex; width: 66rpx; height: 66rpx; flex: none; align-items: center; justify-content: center; border-radius: 21rpx; background: #ffe8dc; }
+.reaction__icon { display: flex; width: 54rpx; height: 54rpx; flex: none; align-items: center; justify-content: center; border-radius: 17rpx; background: #ffe8dc; }
 .reaction--sad .reaction__icon { background: #dfeaf3; }
 .reaction__copy { flex: 1; }
 .reaction__title, .reaction__desc { display: block; }
-.reaction__title { font-size: 26rpx; font-weight: 700; }
-.reaction__desc { margin-top: 7rpx; color: #8b7a75; font-size: 20rpx; font-weight: 400; }
+.reaction__title { font-size: 24rpx; font-weight: 700; }
+.reaction__desc { margin-top: 4rpx; color: #8b7a75; font-size: 19rpx; font-weight: 400; }
 .reaction--sad .reaction__desc { color: #71879a; }
 .reaction.active { background: #ffece3; color: #b85449; }
 .reaction--sad.active { background: #e2edf5; color: #55758f; }
@@ -185,4 +251,5 @@ const saveComment = (commentId: string) => {
 .send-button { min-width: 110rpx; min-height: 64rpx; border-radius: 20rpx; background: #d87263; color: #fff; font-size: 24rpx; font-weight: 700; }
 .send-button.disabled { opacity: .45; }
 .comments-closed { gap: 8rpx; justify-content: center; margin-top: 24rpx; color: #9b8c88; font-size: 22rpx; }
+.detail-retry { display: flex; min-height: 72rpx; margin: 22rpx auto 0; padding: 0 28rpx; align-items: center; justify-content: center; border-radius: 20rpx; background: #d87263; color: #fff; font-size: 23rpx; font-weight: 700; line-height: 1; }
 </style>

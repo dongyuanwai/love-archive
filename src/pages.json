@@ -2,7 +2,7 @@
   "pages": [
     {
       "path": "pages/archive/index",
-      "style": { "navigationBarTitleText": "爱恋存档" }
+      "style": { "navigationBarTitleText": "爱恋存档", "onReachBottomDistance": 120 }
     },
     {
       "path": "pages/create/index",
@@ -30,12 +30,13 @@
     }
   ],
   "tabBar": {
+    "custom": true,
     "color": "#8B7E7A",
     "selectedColor": "#D87263",
     "backgroundColor": "#FFFCF8",
     "borderStyle": "white",
     "list": [
-      { "pagePath": "pages/archive/index", "text": "存档", "iconPath": "static/icons/tabbar/archive.png", "selectedIconPath": "static/icons/tabbar/archive-active.png" },
+      { "pagePath": "pages/archive/index", "text": "首页", "iconPath": "static/icons/tabbar/archive.png", "selectedIconPath": "static/icons/tabbar/archive-active.png" },
       { "pagePath": "pages/create/index", "text": "记录", "iconPath": "static/icons/tabbar/create.png", "selectedIconPath": "static/icons/tabbar/create-active.png" },
       { "pagePath": "pages/insights/index", "text": "回顾", "iconPath": "static/icons/tabbar/insights.png", "selectedIconPath": "static/icons/tabbar/insights-active.png" },
       { "pagePath": "pages/profile/index", "text": "我的", "iconPath": "static/icons/tabbar/profile.png", "selectedIconPath": "static/icons/tabbar/profile-active.png" }

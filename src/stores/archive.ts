@@ -1,18 +1,26 @@
 import { defineStore } from 'pinia'
+import { resolveAssetUrl } from '@/utils/assets'
 import type { MoodKind, MoodRecord, Relationship, UserProfile, Visibility } from '@/types/domain'
 import { todayString } from '@/utils/date'
+import { clearTokens } from '@/api/token'
+import type { CurrentRelationshipResponse, RelationshipInvite } from '@/api/relationships'
 
 const userStorageKey = 'love-archive:test-new-user'
+const inviteStorageKey = 'love-archive:relationship-invite'
 const defaultUser: UserProfile = { name: '微信用户', initial: '微', avatarUrl: '', isLoggedIn: false }
+const createEmptyRelationship = (): Relationship => ({
+  id: '', partnerName: '', partnerInitial: '', startedAt: '', active: false,
+})
 
 const getStoredUser = (): UserProfile => {
   try {
     const stored = uni.getStorageSync(userStorageKey) as Partial<UserProfile> | undefined
     if (!stored?.isLoggedIn || !stored.name) return { ...defaultUser }
     return {
+      id: stored.id,
       name: stored.name,
       initial: stored.name.slice(-1),
-      avatarUrl: stored.avatarUrl || '',
+      avatarUrl: resolveAssetUrl(stored.avatarUrl),
       isLoggedIn: true,
     }
   } catch {
@@ -22,37 +30,62 @@ const getStoredUser = (): UserProfile => {
 
 const seedRecords: MoodRecord[] = []
 
+const getStoredInvite = (): RelationshipInvite | null => {
+  try {
+    const stored = uni.getStorageSync(inviteStorageKey) as RelationshipInvite | undefined
+    if (!stored?.code || !stored.expiresAt || new Date(stored.expiresAt).getTime() <= Date.now()) return null
+    return stored
+  } catch {
+    return null
+  }
+}
+
+const storedInvite = getStoredInvite()
+
 export const useArchiveStore = defineStore('archive', {
   state: () => ({
     user: getStoredUser(),
-    relationship: {
-      id: '', partnerName: '', partnerInitial: '', startedAt: '', active: false
-    } as Relationship,
+    relationship: createEmptyRelationship(),
     records: seedRecords as MoodRecord[],
-    inviteCode: 'LOV826',
+    inviteCode: storedInvite?.code || '',
+    inviteExpiresAt: storedInvite?.expiresAt || '',
   }),
   getters: {
     activeRelationship: (state) => state.relationship.active ? state.relationship : null,
     visibleFeed(state): MoodRecord[] {
       return state.records
-        .filter((record) => record.authorId === 'me' || (
-          state.relationship.active &&
-          record.relationshipId === state.relationship.id &&
-          record.visibility === 'partner'
-        ))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     },
     recordById: (state) => (id: string) => state.records.find((record) => record.id === id),
   },
   actions: {
-    completeWechatLogin(name: string, avatarUrl: string) {
+    completeWechatLogin(name: string, avatarUrl = '', userId?: string) {
       const normalizedName = name.trim()
-      if (!normalizedName || !avatarUrl) return false
+      if (!normalizedName) return false
       this.user = {
+        id: userId,
         name: normalizedName,
         initial: normalizedName.slice(-1),
-        avatarUrl,
+        avatarUrl: resolveAssetUrl(avatarUrl),
         isLoggedIn: true,
+      }
+      this.records.forEach((record) => {
+        if (record.authorId === 'me') record.authorName = normalizedName
+        record.comments.forEach((comment) => {
+          if (comment.authorId === 'me') comment.authorName = normalizedName
+        })
+      })
+      uni.setStorageSync(userStorageKey, this.user)
+      return true
+    },
+    updateUserProfile(name: string, avatarUrl?: string) {
+      const normalizedName = name.trim()
+      if (!normalizedName || !this.user.isLoggedIn) return false
+      this.user = {
+        ...this.user,
+        name: normalizedName,
+        initial: normalizedName.slice(-1),
+        avatarUrl: avatarUrl === undefined ? this.user.avatarUrl : resolveAssetUrl(avatarUrl),
       }
       this.records.forEach((record) => {
         if (record.authorId === 'me') record.authorName = normalizedName
@@ -65,13 +98,54 @@ export const useArchiveStore = defineStore('archive', {
     },
     logout() {
       this.user = { ...defaultUser }
-      this.records.forEach((record) => {
-        if (record.authorId === 'me') record.authorName = defaultUser.name
-        record.comments.forEach((comment) => {
-          if (comment.authorId === 'me') comment.authorName = defaultUser.name
-        })
-      })
+      this.relationship = createEmptyRelationship()
+      this.records = []
       uni.removeStorageSync(userStorageKey)
+      this.clearInvite()
+      clearTokens()
+    },
+    replaceRecords(records: MoodRecord[]) {
+      this.records = records
+    },
+    appendRecords(records: MoodRecord[]) {
+      const existingIds = new Set(this.records.map((record) => record.id))
+      this.records.push(...records.filter((record) => !existingIds.has(record.id)))
+    },
+    prependRecord(record: MoodRecord) {
+      this.records = [record, ...this.records.filter((item) => item.id !== record.id)]
+    },
+    upsertRecord(record: MoodRecord) {
+      const index = this.records.findIndex((item) => item.id === record.id)
+      if (index === -1) this.records.unshift(record)
+      else this.records[index] = record
+    },
+    setCurrentRelationship(result: CurrentRelationshipResponse) {
+      if (!result.active || !result.relationship?.partner) {
+        this.relationship = createEmptyRelationship()
+        return
+      }
+      const partnerName = result.relationship.partner.nickname
+      this.relationship = {
+        id: result.relationship.id,
+        partnerName,
+        partnerInitial: partnerName.slice(-1),
+        startedAt: result.relationship.startedAt.slice(0, 10),
+        active: true,
+        daysTogether: result.relationship.stats.daysTogether,
+        sharedMoodCount: result.relationship.stats.sharedMoodCount,
+        responseCount: result.relationship.stats.responseCount,
+      }
+      this.clearInvite()
+    },
+    setInvite(invite: RelationshipInvite) {
+      this.inviteCode = invite.code
+      this.inviteExpiresAt = invite.expiresAt
+      uni.setStorageSync(inviteStorageKey, invite)
+    },
+    clearInvite() {
+      this.inviteCode = ''
+      this.inviteExpiresAt = ''
+      uni.removeStorageSync(inviteStorageKey)
     },
     addRecord(payload: { mood: MoodKind; emotion: string; content: string; recordDate: string; visibility: Visibility; allowComments: boolean }) {
       const now = new Date()
@@ -126,7 +200,7 @@ export const useArchiveStore = defineStore('archive', {
       return true
     },
     regenerateInviteCode() {
-      this.inviteCode = `LOVE${String(Date.now()).slice(-4)}`
+      this.clearInvite()
     },
   },
 })
