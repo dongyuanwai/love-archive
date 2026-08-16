@@ -15,6 +15,7 @@ const range = ref<InsightPeriod>('week')
 const summary = ref<InsightSummary | null>(null)
 const calendarSummary = ref<InsightSummary | null>(null)
 const reportLoading = ref(store.user.isLoggedIn)
+const reportShowLoading = ref(store.user.isLoggedIn)
 const reportReady = ref(false)
 const reportError = ref('')
 const ownerOptions = computed(() => [
@@ -73,12 +74,13 @@ const days = computed(() => {
   return cells
 })
 
-const loadReport = async () => {
+const loadReport = async (showLoading = true) => {
   if (!store.user.isLoggedIn) {
     summary.value = null
     return
   }
   reportLoading.value = true
+  reportShowLoading.value = showLoading
   reportError.value = ''
   try {
     const current = await getCurrentRelationship()
@@ -94,15 +96,16 @@ const loadReport = async () => {
     reportError.value = error instanceof Error ? error.message : '情绪报告加载失败'
   } finally {
     reportLoading.value = false
+    reportShowLoading.value = false
     reportReady.value = true
   }
 }
 
 onShow(() => {
   syncTabBarSelection()
-  void loadReport()
+  void loadReport(!reportReady.value)
 })
-watch([owner, range], loadReport)
+watch([owner, range], () => { void loadReport(true) })
 </script>
 
 <template>
@@ -146,10 +149,16 @@ watch([owner, range], loadReport)
       <button class="report-retry" @tap="loadReport">重新加载</button>
     </view>
     <template v-else-if="hasRecords">
-    <view class="report-content" :class="{ 'report-content--refreshing': reportLoading }">
+    <view class="report-content" :class="{ 'report-content--refreshing': reportShowLoading }">
     <SegmentControl v-model="owner" :options="ownerOptions" class="owner-switch" />
 
-    <view class="section-heading calendar-heading"><view><text class="section-title">情绪日历</text><text class="section-desc">{{ currentMonthLabel }}</text></view><view class="calendar-legend"><span><i class="happy"/>开心</span><span><i class="sad"/>难过</span></view></view>
+    <view class="section-heading calendar-heading">
+      <view><text class="section-title">情绪日历</text><text class="section-desc">{{ currentMonthLabel }}</text></view>
+      <view class="calendar-legend">
+        <view class="calendar-legend__item calendar-legend__item--happy"><i /><text>开心</text></view>
+        <view class="calendar-legend__item calendar-legend__item--sad"><i /><text>难过</text></view>
+      </view>
+    </view>
     <view class="calendar-card card">
       <view class="week-row"><text v-for="item in ['一','二','三','四','五','六','日']" :key="item">{{ item }}</text></view>
       <view class="days-grid">
@@ -201,7 +210,7 @@ watch([owner, range], loadReport)
 .range-tabs button { display: flex; height: 62rpx; padding: 0 28rpx; align-items: center; justify-content: center; border-radius: 999rpx; background: #fff; color: #897a76; font-size: 23rpx; line-height: 1; text-align: center; }
 .range-tabs button.active { background: #d87263; color: #fff; font-weight: 700; }
 .overview { margin-top: 24rpx; padding: 30rpx; }
-.overview__head, .mood-balance, .section-heading, .legend, .calendar-legend, .calendar-legend span, .privacy-tip { display: flex; align-items: center; }
+.overview__head, .mood-balance, .section-heading, .legend, .calendar-legend, .calendar-legend__item, .privacy-tip { display: flex; align-items: center; }
 .overview__head, .section-heading { justify-content: space-between; }
 .card-kicker { display: block; color: #a26a60; font-size: 21rpx; font-weight: 700; }
 .overview__title { display: block; margin-top: 6rpx; font-size: 31rpx; font-weight: 750; }
@@ -224,9 +233,13 @@ watch([owner, range], loadReport)
 .stat-value,.stat-label{display:block}.stat-value{margin-top:16rpx;font-size:31rpx;font-weight:750}.stat-label{margin-top:5rpx;color:#938480;font-size:21rpx}
 .calendar-heading { margin-top: 28rpx; }
 .owner-switch { margin-top: 0; }
-.calendar-legend { gap: 14rpx; color: #8f807c; font-size: 19rpx; }.calendar-legend span{gap:5rpx}.calendar-legend i{width:12rpx;height:12rpx;border-radius:50%}.calendar-legend .happy{background:#f0a477}.calendar-legend .sad{background:#91aeca}
+.calendar-legend { gap: 10rpx; font-size: 19rpx; }
+.calendar-legend__item { gap: 7rpx; padding: 9rpx 13rpx; border: 1rpx solid transparent; border-radius: 999rpx; line-height: 1; }
+.calendar-legend__item i { width: 11rpx; height: 11rpx; flex: none; border-radius: 50%; background: currentColor; }
+.calendar-legend__item--happy { border-color: #f3d6c0; background: #fff0e3; color: #a76848; }
+.calendar-legend__item--sad { border-color: #d3e0ea; background: #e9f0f6; color: #5e7890; }
 .calendar-card { margin-top: 18rpx; padding: 25rpx 20rpx; }.week-row{margin-bottom:14rpx}.days-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8rpx}.day{display:flex;height:68rpx;flex-direction:column;align-items:center;justify-content:center;border-radius:18rpx;color:#736461;font-size:22rpx}.day i{width:8rpx;height:8rpx;margin-top:5rpx;border-radius:50%;background:currentColor}.day--happy{background:#fff0e3;color:#a76848}.day--sad{background:#e9f0f6;color:#5e7890}
 .privacy-tip { gap: 10rpx; margin: 22rpx 8rpx 0; align-items: flex-start; color: #958682; font-size: 20rpx; line-height: 1.6; }
-.insights-skeleton,.report-content{display:block}.skeleton-block{overflow:hidden;background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}.skeleton-line{border-radius:999rpx}.skeleton-owner{height:80rpx;border-radius:22rpx}.skeleton-heading-title{width:142rpx;height:36rpx}.skeleton-heading-desc{width:122rpx;height:21rpx;margin-top:7rpx}.skeleton-legend{width:136rpx;height:24rpx}.skeleton-card{pointer-events:none}.skeleton-day{border-radius:18rpx}.skeleton-tabs{align-items:center}.skeleton-pill{width:112rpx;height:62rpx;border-radius:999rpx}.skeleton-overview{min-height:330rpx}.skeleton-kicker{width:94rpx;height:21rpx}.skeleton-overview-title{width:238rpx;height:31rpx;margin-top:6rpx}.skeleton-period{width:170rpx;height:20rpx}.skeleton-balance{display:flex;margin-top:30rpx;align-items:center;justify-content:space-between}.skeleton-mood{width:205rpx;height:72rpx;border-radius:22rpx}.skeleton-bar{height:16rpx;margin-top:24rpx;border-radius:99rpx}.skeleton-note{width:78%;height:22rpx;margin-top:21rpx}.skeleton-stat{min-height:190rpx}.skeleton-stat-icon{width:57rpx;height:57rpx;border-radius:19rpx}.skeleton-stat-value{width:92rpx;height:31rpx;margin-top:16rpx}.skeleton-stat-label{width:106rpx;height:21rpx;margin-top:5rpx}.report-content--refreshing .calendar-card,.report-content--refreshing .overview,.report-content--refreshing .stat-card{position:relative;overflow:hidden;pointer-events:none}.report-content--refreshing .calendar-card::after,.report-content--refreshing .overview::after,.report-content--refreshing .stat-card::after{position:absolute;z-index:2;inset:0;content:'';background:linear-gradient(100deg,rgba(255,250,248,.34) 20%,rgba(245,226,225,.72) 42%,rgba(255,250,248,.34) 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}@keyframes skeleton-shimmer{to{background-position:-220% 0}}
+.insights-skeleton,.report-content{display:block}.skeleton-block{overflow:hidden;background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}.skeleton-line{border-radius:999rpx}.skeleton-owner{height:80rpx;border-radius:22rpx}.skeleton-heading-title{width:142rpx;height:36rpx}.skeleton-heading-desc{width:122rpx;height:21rpx;margin-top:7rpx}.skeleton-legend{width:176rpx;height:42rpx;border-radius:999rpx}.skeleton-card{pointer-events:none}.skeleton-day{border-radius:18rpx}.skeleton-tabs{align-items:center}.skeleton-pill{width:112rpx;height:62rpx;border-radius:999rpx}.skeleton-overview{min-height:330rpx}.skeleton-kicker{width:94rpx;height:21rpx}.skeleton-overview-title{width:238rpx;height:31rpx;margin-top:6rpx}.skeleton-period{width:170rpx;height:20rpx}.skeleton-balance{display:flex;margin-top:30rpx;align-items:center;justify-content:space-between}.skeleton-mood{width:205rpx;height:72rpx;border-radius:22rpx}.skeleton-bar{height:16rpx;margin-top:24rpx;border-radius:99rpx}.skeleton-note{width:78%;height:22rpx;margin-top:21rpx}.skeleton-stat{min-height:190rpx}.skeleton-stat-icon{width:57rpx;height:57rpx;border-radius:19rpx}.skeleton-stat-value{width:92rpx;height:31rpx;margin-top:16rpx}.skeleton-stat-label{width:106rpx;height:21rpx;margin-top:5rpx}.report-content--refreshing .calendar-card,.report-content--refreshing .overview,.report-content--refreshing .stat-card{position:relative;overflow:hidden;pointer-events:none}.report-content--refreshing .calendar-card::after,.report-content--refreshing .overview::after,.report-content--refreshing .stat-card::after{position:absolute;z-index:2;inset:0;content:'';background:linear-gradient(100deg,rgba(255,250,248,.34) 20%,rgba(245,226,225,.72) 42%,rgba(255,250,248,.34) 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}@keyframes skeleton-shimmer{to{background-position:-220% 0}}
 @media (prefers-reduced-motion: reduce) { .balance-bar__happy { transition: none; }.skeleton-block,.report-content--refreshing .calendar-card::after,.report-content--refreshing .overview::after,.report-content--refreshing .stat-card::after{animation:none} }
 </style>

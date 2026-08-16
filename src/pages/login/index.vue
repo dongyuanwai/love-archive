@@ -160,7 +160,7 @@ const completeRegistration = async () => {
 </template>
 
 <style scoped lang="scss">
-.login-page { padding-top: 74rpx; }
+.login-page { padding-top: 32rpx; }
 .login-head { padding: 10rpx 4rpx 42rpx; }
 .login-head__title { display: block; margin-top: 18rpx; font-size: 48rpx; font-weight: 750; }
 .login-head__desc { display: block; margin-top: 15rpx; color: #746663; font-size: 24rpx; line-height: 1.7; }

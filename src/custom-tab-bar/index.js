@@ -58,6 +58,8 @@ Component({
       const item = this.data.list[index]
       if (!item) return
 
+      if (index === this.data.selected) return
+
       if (item.target) {
         const user = wx.getStorageSync(userStorageKey)
         const accessToken = wx.getStorageSync(accessTokenKey)
@@ -67,9 +69,10 @@ Component({
         }
       }
 
+      this.setData({ selected: index })
       wx.switchTab({
         url: item.pagePath,
-        success: () => this.setData({ selected: index }),
+        fail: () => this.syncSelected(),
       })
     },
   },

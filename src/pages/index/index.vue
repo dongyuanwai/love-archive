@@ -21,6 +21,7 @@ interface FeedState {
   total: number
   loaded: boolean
   loading: boolean
+  showLoading: boolean
   loadingMore: boolean
   error: string
   loadMoreError: string
@@ -33,6 +34,7 @@ const createFeedState = (): FeedState => ({
   total: 0,
   loaded: false,
   loading: false,
+  showLoading: false,
   loadingMore: false,
   error: '',
   loadMoreError: '',
@@ -46,6 +48,7 @@ const feeds = reactive<Record<ArchiveFilter, FeedState>>({
 const pageSize = 10
 const todayStatus = ref<TodayMoodStatus | null>(null)
 const contextLoading = ref(store.user.isLoggedIn)
+const contextShowLoading = ref(store.user.isLoggedIn)
 const contextReady = ref(false)
 const respondingId = ref('')
 const inviteLoading = ref(false)
@@ -72,7 +75,7 @@ const ensureInviteCode = async () => {
 const toListScope = (value: ArchiveFilter): MoodListScope => value === 'me' ? 'mine' : value
 const activeFeed = computed(() => feeds[filter.value])
 const records = computed(() => activeFeed.value.items)
-const recordsLoading = computed(() => activeFeed.value.loading)
+const recordsLoading = computed(() => activeFeed.value.showLoading)
 const loadingMore = computed(() => activeFeed.value.loadingMore)
 const recordsError = computed(() => activeFeed.value.error)
 const loadMoreError = computed(() => activeFeed.value.loadMoreError)
@@ -90,7 +93,7 @@ const updateCachedRecord = (record: MoodRecord) => {
   })
 }
 
-const loadRecords = async (scope: ArchiveFilter = filter.value) => {
+const loadRecords = async (scope: ArchiveFilter = filter.value, showLoading = true) => {
   if (!store.user.isLoggedIn) {
     resetFeeds()
     store.replaceRecords([])
@@ -101,6 +104,7 @@ const loadRecords = async (scope: ArchiveFilter = filter.value) => {
   const feed = feeds[scope]
   const requestId = ++feedRequestIds[scope]
   feed.loading = true
+  feed.showLoading = showLoading
   feed.error = ''
   feed.loadMoreError = ''
   try {
@@ -115,20 +119,25 @@ const loadRecords = async (scope: ArchiveFilter = filter.value) => {
     if (requestId !== feedRequestIds[scope] || !store.user.isLoggedIn) return
     feed.error = error instanceof Error ? error.message : '心情列表加载失败'
   } finally {
-    if (requestId === feedRequestIds[scope]) feed.loading = false
+    if (requestId === feedRequestIds[scope]) {
+      feed.loading = false
+      feed.showLoading = false
+    }
   }
 }
 
-const loadPageContext = async () => {
+const loadPageContext = async (showLoading = true) => {
   const requestId = ++contextRequestId
   if (!store.user.isLoggedIn) {
     contextLoading.value = false
+    contextShowLoading.value = false
     contextReady.value = true
     todayStatus.value = null
     store.setCurrentRelationship({ active: false, relationship: null })
     return
   }
   contextLoading.value = true
+  contextShowLoading.value = showLoading
   try {
     const [statusResult, relationshipResult] = await Promise.all([
       getTodayMoodStatus(),
@@ -143,6 +152,7 @@ const loadPageContext = async () => {
   } finally {
     if (requestId === contextRequestId) {
       contextLoading.value = false
+      contextShowLoading.value = false
       contextReady.value = true
     }
   }
@@ -176,8 +186,8 @@ onShow(() => {
   filterKeys.forEach((key) => {
     if (key !== filter.value) feeds[key].loaded = false
   })
-  void loadRecords()
-  void loadPageContext()
+  void loadRecords(filter.value, !activeFeed.value.loaded)
+  void loadPageContext(!contextReady.value)
 })
 onReachBottom(loadMoreRecords)
 
@@ -298,7 +308,7 @@ watch(filter, (value) => {
       </view>
       <view class="skeleton-block skeleton-chevron" />
     </view>
-    <view v-else-if="store.activeRelationship" class="bond-card card" :class="{ 'data-card--refreshing': contextLoading }" @tap="goBinding">
+    <view v-else-if="store.activeRelationship" class="bond-card card" :class="{ 'data-card--refreshing': contextShowLoading }" @tap="goBinding">
       <view class="bond-card__icon"><text class="bond-heart">♥</text></view>
       <view class="bond-card__copy">
         <text class="bond-card__title">正在和 {{ store.activeRelationship.partnerName }} 共同存档</text>
@@ -306,7 +316,7 @@ watch(filter, (value) => {
       </view>
       <AppIcon name="chevron" :size="17" color="#a89691" />
     </view>
-    <view v-else class="bond-card card" :class="{ 'data-card--refreshing': contextLoading }" @tap="goBinding">
+    <view v-else class="bond-card card" :class="{ 'data-card--refreshing': contextShowLoading }" @tap="goBinding">
       <view class="bond-card__icon"><text class="bond-heart">♥</text></view>
       <view class="bond-card__copy"><text class="bond-card__title">邀请你的对象共同存档</text><text class="bond-card__desc">未绑定时也可以安心独自记录</text></view>
       <AppIcon name="chevron" :size="17" color="#a89691" />
@@ -329,7 +339,7 @@ watch(filter, (value) => {
         <view class="skeleton-block skeleton-inbox-action" />
       </view>
     </view>
-    <view v-else class="mood-inbox card" :class="{ 'data-card--refreshing': contextLoading }">
+    <view v-else class="mood-inbox card" :class="{ 'data-card--refreshing': contextShowLoading }">
       <view class="inbox-row" @tap="openTodayMood(myTodayMoodId, 'me')">
         <view class="inbox-avatar">
           <image v-if="store.user.avatarUrl" class="user-avatar-image" :src="store.user.avatarUrl" mode="aspectFill" />
@@ -440,7 +450,7 @@ watch(filter, (value) => {
 </template>
 
 <style scoped lang="scss">
-.archive-page { padding-top: 42rpx; padding-bottom: calc(104rpx + env(safe-area-inset-bottom)); }
+.archive-page { padding-top: 24rpx; padding-bottom: calc(104rpx + env(safe-area-inset-bottom)); }
 .hero { display: flex; align-items: flex-start; justify-content: space-between; padding: 12rpx 2rpx 38rpx; }
 .hero__title { display: block; max-width: 500rpx; margin-top: 18rpx; font-size: 48rpx; font-weight: 750; line-height: 1.32; letter-spacing: 1rpx; }
 .hero__sub { display: block; max-width: 510rpx; margin-top: 18rpx; color: #736562; font-size: 25rpx; line-height: 1.65; }

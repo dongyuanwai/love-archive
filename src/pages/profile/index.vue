@@ -177,7 +177,7 @@ const logout = () => {
 
 
     <button v-if="store.user.isLoggedIn" class="logout" :loading="logoutLoading" :disabled="logoutLoading" @tap="logout">{{ logoutLoading ? '正在退出…' : '退出登录' }}</button>
-    <text class="version">爱恋存档 · 前端体验版 0.1.0</text>
+    <text class="footer-note">爱恋存档 · 愿每一种心情，都被温柔看见</text>
 
     <view v-if="nicknameEditorVisible" class="editor-mask" @tap="closeNicknameEditor">
       <view class="nickname-editor" @tap.stop>
@@ -213,6 +213,6 @@ const logout = () => {
 .skeleton-chevron { width: 18rpx; height: 30rpx; flex: none; border-radius: 999rpx; }
 @keyframes skeleton-shimmer { to { background-position: -220% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton-block { animation: none; } }
-.menu{margin-top:24rpx;padding:0 24rpx}.menu-row{width:100%;min-height:120rpx;justify-content:flex-start;background:transparent;line-height:1.2;text-align:left}.menu-row--border{border-top:1rpx solid #f0e8e3}.menu-icon{display:flex;width:64rpx;height:64rpx;align-items:center;justify-content:center;border-radius:19rpx;background:#ffeadf;color:#95584e}.menu-copy{flex:1;margin-left:19rpx}.menu-label,.menu-desc{display:block}.menu-label{font-size:27rpx;font-weight:650}.menu-desc{margin-top:6rpx;color:#847672;font-size:21rpx}.logout{width:100%;margin-top:28rpx;min-height:92rpx;border:1rpx solid #f0e4dd;border-radius:24rpx;background:#fff;color:#a6554c;font-size:26rpx}.version{display:block;margin-top:22rpx;color:#998a86;font-size:19rpx;text-align:center}
+.menu{margin-top:24rpx;padding:0 24rpx}.menu-row{width:100%;min-height:120rpx;justify-content:flex-start;background:transparent;line-height:1.2;text-align:left}.menu-row--border{border-top:1rpx solid #f0e8e3}.menu-icon{display:flex;width:64rpx;height:64rpx;align-items:center;justify-content:center;border-radius:19rpx;background:#ffeadf;color:#95584e}.menu-copy{flex:1;margin-left:19rpx}.menu-label,.menu-desc{display:block}.menu-label{font-size:27rpx;font-weight:650}.menu-desc{margin-top:6rpx;color:#847672;font-size:21rpx}.logout{width:100%;margin-top:28rpx;min-height:92rpx;border:1rpx solid #f0e4dd;border-radius:24rpx;background:#fff;color:#a6554c;font-size:26rpx}.footer-note{display:block;margin-top:22rpx;color:#998a86;font-size:19rpx;letter-spacing:1rpx;text-align:center}
 .editor-mask{position:fixed;z-index:100;inset:0;display:flex;padding:32rpx;align-items:center;justify-content:center;background:rgba(48,39,37,.4)}.nickname-editor{width:100%;padding:34rpx 30rpx 28rpx;border-radius:32rpx;background:#fffaf6;box-shadow:0 24rpx 60rpx rgba(66,47,42,.2)}.nickname-editor__title,.nickname-editor__desc{display:block}.nickname-editor__title{font-size:32rpx;font-weight:750}.nickname-editor__desc{margin-top:10rpx;color:#847672;font-size:22rpx;line-height:1.6}.nickname-editor__input{height:88rpx;margin-top:26rpx;padding:0 22rpx;border:1rpx solid #eadbd2;border-radius:22rpx;background:#fff;color:#4d403d;font-size:28rpx}.nickname-editor__actions{display:flex;gap:18rpx;margin-top:24rpx}.editor-button{display:flex;min-height:82rpx;flex:1;align-items:center;justify-content:center;border-radius:22rpx;font-size:26rpx;font-weight:700;line-height:1}.editor-button--cancel{background:#f3ebe6;color:#746663}.editor-button--save{background:#c96f61;color:#fff}.editor-button[disabled]{opacity:.6}
 </style>

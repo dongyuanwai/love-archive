@@ -1,6 +1,6 @@
 page {
   min-height: 100%;
-  background: #fff7f7;
+  background: #fce9ee;
   color: #3d3331;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 28rpx;
@@ -28,7 +28,7 @@ button::after {
 
 .page-shell {
   min-height: 100vh;
-  padding: 36rpx 32rpx calc(96rpx + env(safe-area-inset-bottom));
+  padding: 20rpx 32rpx calc(96rpx + env(safe-area-inset-bottom));
   background: linear-gradient(
     165deg,
     #fce9ee 0,

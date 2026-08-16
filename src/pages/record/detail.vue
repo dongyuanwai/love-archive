@@ -158,10 +158,10 @@ const toggleReaction = async () => {
       </button>
     </view>
 
-    <text class="section-title">
-      温柔回应
+    <view class="response-heading">
+      <text class="response-heading__title">温柔回应</text>
       <text class="comment-count">{{ record.comments.length ? `已有 ${record.comments.length} 条评论` : '暂无评论' }}</text>
-    </text>
+    </view>
     <view v-if="record.comments.length" class="comments card">
       <view v-for="item in record.comments" :key="item.id" class="comment-item">
         <view class="comment-avatar"><image v-if="item.authorAvatarUrl || (item.authorId === 'me' && store.user.avatarUrl)" class="avatar__image" :src="item.authorAvatarUrl || store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ item.authorName.slice(-1) }}</text></view>
@@ -231,7 +231,9 @@ const toggleReaction = async () => {
 .reaction--sad .reaction__desc { color: #71879a; }
 .reaction.active { background: #ffece3; color: #b85449; }
 .reaction--sad.active { background: #e2edf5; color: #55758f; }
-.comment-count { color: #ad7167; font-size: 25rpx; }
+.response-heading { display: flex; min-height: 56rpx; margin: 52rpx 4rpx 24rpx; align-items: center; justify-content: space-between; }
+.response-heading__title { color: #3d3331; font-size: 34rpx; font-weight: 700; line-height: 1.3; }
+.comment-count { flex: none; margin-left: 20rpx; color: #ad7167; font-size: 22rpx; line-height: 1.3; }
 .comments { padding: 8rpx 26rpx; }
 .comment-item { display: flex; gap: 16rpx; padding: 24rpx 0; border-bottom: 1rpx solid #f1e9e4; }
 .comment-item:last-child { border-bottom: 0; }
