@@ -8,7 +8,7 @@ Component({
     selectedColor: '#D87263',
     list: [
       {
-        pagePath: '/pages/archive/index',
+        pagePath: '/pages/index/index',
         text: '首页',
         iconPath: '/static/icons/tabbar/archive.png',
         selectedIconPath: '/static/icons/tabbar/archive-active.png',

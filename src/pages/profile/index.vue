@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppIcon, { type AppIconName } from '@/components/AppIcon.vue'
+import LoadingIndicator from '@/components/LoadingIndicator.vue'
 import { useArchiveStore } from '@/stores/archive'
 import { getMyProfile, updateMyProfile } from '@/api/users'
 import { getCurrentRelationship } from '@/api/relationships'
@@ -14,12 +15,15 @@ const loginPrompted = ref(false)
 const nicknameEditorVisible = ref(false)
 const nicknameDraft = ref('')
 const profileSaving = ref(false)
+const profileLoading = ref(false)
+const logoutLoading = ref(false)
 const moodCount = ref(0)
 
 onShow(async () => {
   syncTabBarSelection()
   if (store.user.isLoggedIn) {
     loginPrompted.value = false
+    profileLoading.value = true
     try {
       const [profile, relationship] = await Promise.all([
         getMyProfile(),
@@ -30,12 +34,15 @@ onShow(async () => {
       moodCount.value = profile.moodCount || 0
     } catch (error) {
       uni.showToast({ title: error instanceof Error ? error.message : '个人资料加载失败', icon: 'none' })
+    } finally {
+      profileLoading.value = false
     }
     return
   }
+  profileLoading.value = false
   if (loginPrompted.value) {
     loginPrompted.value = false
-    uni.switchTab({ url: '/pages/archive/index' })
+    uni.switchTab({ url: '/pages/index/index' })
     return
   }
   if (redirectingToLogin.value) return
@@ -96,6 +103,7 @@ const logout = () => {
     confirmColor: '#b65b52',
     success: async (result) => {
       if (!result.confirm) return
+      logoutLoading.value = true
       try {
         await logoutWechat()
       } catch {
@@ -103,7 +111,8 @@ const logout = () => {
       }
       store.logout()
       uni.showToast({ title: '已退出登录', icon: 'none' })
-      uni.switchTab({ url: '/pages/archive/index' })
+      uni.switchTab({ url: '/pages/index/index' })
+      logoutLoading.value = false
     },
   })
 }
@@ -115,6 +124,7 @@ const logout = () => {
       <text class="eyebrow">MY ARCHIVE</text>
       <text class="profile-head__title">照顾关系，也照顾自己</text>
     </view>
+    <LoadingIndicator v-if="profileLoading" class="profile-sync" text="正在同步个人资料" compact />
     <view class="identity card">
       <image v-if="store.user.avatarUrl" class="identity__avatar identity__avatar--image" :src="store.user.avatarUrl" mode="aspectFill" />
       <view v-else class="identity__avatar">{{ store.user.initial }}</view>
@@ -129,7 +139,10 @@ const logout = () => {
     </view>
 
     <view class="relationship card" @tap="goBinding">
-      <view v-if="store.activeRelationship" class="relationship__avatars"><view>{{ store.user.initial }}</view><view>{{ store.activeRelationship.partnerInitial }}</view></view>
+      <view v-if="store.activeRelationship" class="relationship__avatars">
+        <view><image v-if="store.user.avatarUrl" class="relationship__avatar-image" :src="store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ store.user.initial }}</text></view>
+        <view><image v-if="store.activeRelationship.partnerAvatarUrl" class="relationship__avatar-image" :src="store.activeRelationship.partnerAvatarUrl" mode="aspectFill" /><text v-else>{{ store.activeRelationship.partnerInitial }}</text></view>
+      </view>
       <view v-else class="relationship__empty"><AppIcon name="link" :size="23" /></view>
       <view class="relationship__copy">
         <text class="relationship__label">{{ store.activeRelationship ? '共同存档中' : '还没有绑定对象' }}</text>
@@ -147,7 +160,7 @@ const logout = () => {
       </button>
     </view>
 
-    <button v-if="store.user.isLoggedIn" class="logout" @tap="logout">退出登录</button>
+    <button v-if="store.user.isLoggedIn" class="logout" :loading="logoutLoading" :disabled="logoutLoading" @tap="logout">{{ logoutLoading ? '正在退出…' : '退出登录' }}</button>
     <text class="version">爱恋存档 · 前端体验版 0.1.0</text>
 
     <view v-if="nicknameEditorVisible" class="editor-mask" @tap="closeNicknameEditor">
@@ -166,10 +179,11 @@ const logout = () => {
 
 <style scoped lang="scss">
 .profile-page { padding-bottom: calc(108rpx + env(safe-area-inset-bottom)); }
+.profile-sync { margin: -12rpx 0 12rpx; }
 .profile-head { padding: 12rpx 2rpx 38rpx; }.profile-head__title{display:block;margin-top:18rpx;font-size:46rpx;font-weight:750}
 .identity,.relationship,.menu-row{display:flex;align-items:center}.identity{padding:26rpx}.identity__avatar{display:flex;width:92rpx;height:92rpx;flex:none;align-items:center;justify-content:center;border-radius:31rpx;background:linear-gradient(145deg,#f9c9a7,#efa989);color:#784a3e;font-size:33rpx;font-weight:750}.identity__avatar--image{display:block;background:#f5ebe5}.identity__copy{min-width:0;flex:1;margin-left:20rpx}.identity__name,.identity__desc{display:block}.identity__name{font-size:31rpx;font-weight:750}.identity__desc{margin-top:7rpx;color:#958682;font-size:22rpx}.login-badge{padding:8rpx 14rpx;border-radius:999rpx;background:#edf7ef;color:#4f8760;font-size:19rpx;font-weight:650}
 .identity__actions{display:flex;flex:none;gap:9rpx;align-items:flex-end;flex-direction:column}.edit-nickname{min-height:44rpx;padding:0 10rpx;background:transparent;color:#a35e52;font-size:20rpx;line-height:44rpx}
-.relationship{margin-top:20rpx;padding:27rpx;background:linear-gradient(135deg,#fff,#fff1e7)}.relationship__avatars{display:flex;width:104rpx}.relationship__avatars view,.relationship__empty{display:flex;width:67rpx;height:67rpx;align-items:center;justify-content:center;border:4rpx solid #fff;border-radius:50%;background:#f4b692;color:#7a493c;font-weight:700}.relationship__avatars view+view{margin-left:-25rpx;background:#c8dae8;color:#526b82}.relationship__empty{border:0;background:#fff0e5;color:#a35e52}.relationship__copy{flex:1;margin-left:17rpx}.relationship__label,.relationship__title,.relationship__desc{display:block}.relationship__label{color:#a56a5f;font-size:19rpx;font-weight:700}.relationship__title{margin-top:6rpx;font-size:28rpx;font-weight:750}.relationship__desc{margin-top:6rpx;color:#968682;font-size:20rpx}
+.relationship{margin-top:20rpx;padding:27rpx;background:linear-gradient(135deg,#fff,#fff1e7)}.relationship__avatars{display:flex;width:104rpx}.relationship__avatars>view,.relationship__empty{display:flex;width:67rpx;height:67rpx;overflow:hidden;align-items:center;justify-content:center;border:4rpx solid #fff;border-radius:50%;background:#f4b692;color:#7a493c;font-weight:700}.relationship__avatars>view+view{margin-left:-25rpx;background:#c8dae8;color:#526b82}.relationship__avatar-image{display:block;width:100%;height:100%;border-radius:inherit}.relationship__empty{border:0;background:#fff0e5;color:#a35e52}.relationship__copy{flex:1;margin-left:17rpx}.relationship__label,.relationship__title,.relationship__desc{display:block}.relationship__label{color:#a56a5f;font-size:19rpx;font-weight:700}.relationship__title{margin-top:6rpx;font-size:28rpx;font-weight:750}.relationship__desc{margin-top:6rpx;color:#968682;font-size:20rpx}
 .menu{margin-top:24rpx;padding:0 24rpx}.menu-row{width:100%;min-height:120rpx;justify-content:flex-start;background:transparent;line-height:1.2;text-align:left}.menu-row--border{border-top:1rpx solid #f0e8e3}.menu-icon{display:flex;width:64rpx;height:64rpx;align-items:center;justify-content:center;border-radius:19rpx;background:#ffeadf;color:#95584e}.menu-copy{flex:1;margin-left:19rpx}.menu-label,.menu-desc{display:block}.menu-label{font-size:27rpx;font-weight:650}.menu-desc{margin-top:6rpx;color:#847672;font-size:21rpx}.logout{width:100%;margin-top:28rpx;min-height:92rpx;border:1rpx solid #f0e4dd;border-radius:24rpx;background:#fff;color:#a6554c;font-size:26rpx}.version{display:block;margin-top:22rpx;color:#998a86;font-size:19rpx;text-align:center}
 .editor-mask{position:fixed;z-index:100;inset:0;display:flex;padding:32rpx;align-items:center;justify-content:center;background:rgba(48,39,37,.4)}.nickname-editor{width:100%;padding:34rpx 30rpx 28rpx;border-radius:32rpx;background:#fffaf6;box-shadow:0 24rpx 60rpx rgba(66,47,42,.2)}.nickname-editor__title,.nickname-editor__desc{display:block}.nickname-editor__title{font-size:32rpx;font-weight:750}.nickname-editor__desc{margin-top:10rpx;color:#847672;font-size:22rpx;line-height:1.6}.nickname-editor__input{height:88rpx;margin-top:26rpx;padding:0 22rpx;border:1rpx solid #eadbd2;border-radius:22rpx;background:#fff;color:#4d403d;font-size:28rpx}.nickname-editor__actions{display:flex;gap:18rpx;margin-top:24rpx}.editor-button{display:flex;min-height:82rpx;flex:1;align-items:center;justify-content:center;border-radius:22rpx;font-size:26rpx;font-weight:700;line-height:1}.editor-button--cancel{background:#f3ebe6;color:#746663}.editor-button--save{background:#c96f61;color:#fff}.editor-button[disabled]{opacity:.6}
 </style>

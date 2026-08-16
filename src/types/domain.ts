@@ -14,6 +14,7 @@ export interface Comment {
   id: string
   authorId: AuthorId
   authorName: string
+  authorAvatarUrl?: string
   content: string
   createdAt: string
   isEdited?: boolean
@@ -23,6 +24,7 @@ export interface MoodRecord {
   id: string
   authorId: AuthorId
   authorName: string
+  authorAvatarUrl?: string
   mood: MoodKind
   emotion: string
   content: string
@@ -41,6 +43,7 @@ export interface Relationship {
   id: string
   partnerName: string
   partnerInitial: string
+  partnerAvatarUrl: string
   startedAt: string
   active: boolean
   daysTogether?: number

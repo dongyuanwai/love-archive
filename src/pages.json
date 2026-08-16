@@ -1,7 +1,7 @@
 {
   "pages": [
     {
-      "path": "pages/archive/index",
+      "path": "pages/index/index",
       "style": { "navigationBarTitleText": "爱恋存档", "onReachBottomDistance": 120 }
     },
     {
@@ -36,7 +36,7 @@
     "backgroundColor": "#FFFCF8",
     "borderStyle": "white",
     "list": [
-      { "pagePath": "pages/archive/index", "text": "首页", "iconPath": "static/icons/tabbar/archive.png", "selectedIconPath": "static/icons/tabbar/archive-active.png" },
+      { "pagePath": "pages/index/index", "text": "首页", "iconPath": "static/icons/tabbar/archive.png", "selectedIconPath": "static/icons/tabbar/archive-active.png" },
       { "pagePath": "pages/create/index", "text": "记录", "iconPath": "static/icons/tabbar/create.png", "selectedIconPath": "static/icons/tabbar/create-active.png" },
       { "pagePath": "pages/insights/index", "text": "回顾", "iconPath": "static/icons/tabbar/insights.png", "selectedIconPath": "static/icons/tabbar/insights-active.png" },
       { "pagePath": "pages/profile/index", "text": "我的", "iconPath": "static/icons/tabbar/profile.png", "selectedIconPath": "static/icons/tabbar/profile-active.png" }
@@ -45,8 +45,8 @@
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "爱恋存档",
-    "navigationBarBackgroundColor": "#FFF9F2",
-    "backgroundColor": "#FFF9F2",
+    "navigationBarBackgroundColor": "#FCEEF1",
+    "backgroundColor": "#FFF7F7",
     "backgroundTextStyle": "dark"
   }
 }

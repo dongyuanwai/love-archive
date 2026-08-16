@@ -33,7 +33,7 @@ onShow(() => {
   if (!store.user.isLoggedIn) {
     if (loginPrompted.value) {
       loginPrompted.value = false
-      uni.switchTab({ url: '/pages/archive/index' })
+      uni.switchTab({ url: '/pages/index/index' })
       return
     }
     if (redirectingToLogin.value) return
@@ -82,7 +82,7 @@ const publish = async () => {
     content.value = ''
     recordDate.value = todayString()
     uni.showToast({ title: '这一刻已被收藏', icon: 'success' })
-    setTimeout(() => uni.switchTab({ url: '/pages/archive/index' }), 650)
+    setTimeout(() => uni.switchTab({ url: '/pages/index/index' }), 650)
   } catch (error) {
     uni.showToast({
       title: error instanceof Error ? error.message : '发布失败，请稍后重试',

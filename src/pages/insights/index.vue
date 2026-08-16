@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
+import LoadingIndicator from '@/components/LoadingIndicator.vue'
 import MoodMark from '@/components/MoodMark.vue'
 import SegmentControl from '@/components/SegmentControl.vue'
 import { useArchiveStore } from '@/stores/archive'
@@ -112,16 +113,16 @@ watch([owner, range], loadReport)
       <text class="insights-head__desc">统计只是一面小镜子，不为情绪打分。</text>
     </view>
 
-    <view v-if="reportLoading" class="empty-state card insights-empty">
-      <text class="empty-state__title">正在整理情绪报告</text>
-      <text class="empty-state__desc">请稍等一下。</text>
+    <view v-if="reportLoading && !summary" class="empty-state card insights-empty">
+      <LoadingIndicator text="正在整理情绪报告…" />
     </view>
-    <view v-else-if="reportError" class="empty-state card insights-empty">
+    <view v-else-if="reportError && !summary" class="empty-state card insights-empty">
       <text class="empty-state__title">情绪报告暂时无法打开</text>
       <text class="empty-state__desc">{{ reportError }}</text>
       <button class="report-retry" @tap="loadReport">重新加载</button>
     </view>
     <template v-else-if="hasRecords">
+    <LoadingIndicator v-if="reportLoading" class="report-sync" text="正在同步情绪报告" compact />
     <SegmentControl v-model="owner" :options="ownerOptions" class="owner-switch" />
 
     <view class="section-heading calendar-heading"><view><text class="section-title">情绪日历</text><text class="section-desc">{{ currentMonthLabel }}</text></view><view class="calendar-legend"><span><i class="happy"/>开心</span><span><i class="sad"/>难过</span></view></view>
@@ -198,6 +199,7 @@ watch([owner, range], loadReport)
 .stat-value,.stat-label{display:block}.stat-value{margin-top:16rpx;font-size:31rpx;font-weight:750}.stat-label{margin-top:5rpx;color:#938480;font-size:21rpx}
 .calendar-heading { margin-top: 28rpx; }
 .owner-switch { margin-top: 0; }
+.report-sync { margin-bottom: 10rpx; }
 .calendar-legend { gap: 14rpx; color: #8f807c; font-size: 19rpx; }.calendar-legend span{gap:5rpx}.calendar-legend i{width:12rpx;height:12rpx;border-radius:50%}.calendar-legend .happy{background:#f0a477}.calendar-legend .sad{background:#91aeca}
 .calendar-card { margin-top: 18rpx; padding: 25rpx 20rpx; }.week-row{margin-bottom:14rpx}.days-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8rpx}.day{display:flex;height:68rpx;flex-direction:column;align-items:center;justify-content:center;border-radius:18rpx;color:#736461;font-size:22rpx}.day i{width:8rpx;height:8rpx;margin-top:5rpx;border-radius:50%;background:currentColor}.day--happy{background:#fff0e3;color:#a76848}.day--sad{background:#e9f0f6;color:#5e7890}
 .privacy-tip { gap: 10rpx; margin: 22rpx 8rpx 0; align-items: flex-start; color: #958682; font-size: 20rpx; line-height: 1.6; }

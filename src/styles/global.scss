@@ -1,6 +1,6 @@
 page {
   min-height: 100%;
-  background: #fffaf5;
+  background: #fff7f7;
   color: #3d3331;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 28rpx;
@@ -29,7 +29,13 @@ button::after {
 .page-shell {
   min-height: 100vh;
   padding: 36rpx 32rpx calc(96rpx + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, #fff3e9 0, #fffaf5 420rpx, #fffaf5 100%);
+  background: linear-gradient(
+    165deg,
+    #fce9ee 0,
+    #fff1ef 320rpx,
+    #fff7f3 760rpx,
+    #fffaf6 100%
+  );
 }
 
 .section-title {

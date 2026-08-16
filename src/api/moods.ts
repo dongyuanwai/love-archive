@@ -1,4 +1,5 @@
 import type { AuthorId, Comment, MoodKind, MoodRecord, Visibility } from '@/types/domain'
+import { resolveAssetUrl } from '@/utils/assets'
 import { apiRequest } from './request'
 
 type ApiMoodKind = 'HAPPY' | 'SAD'
@@ -80,6 +81,7 @@ const toComment = (comment: ApiComment, currentUserId?: string): Comment => ({
   id: comment.id,
   authorId: comment.authorId === currentUserId ? 'me' : 'partner',
   authorName: comment.author.nickname,
+  authorAvatarUrl: resolveAssetUrl(comment.author.avatarUrl),
   content: comment.content,
   createdAt: comment.createdAt,
   isEdited: comment.isEdited,
@@ -92,6 +94,7 @@ export const toMoodRecord = (record: ApiMoodRecord, currentUserId?: string): Moo
     id: record.id,
     authorId: record.authorRole,
     authorName: record.author.nickname,
+    authorAvatarUrl: resolveAssetUrl(record.author.avatarUrl),
     mood,
     emotion: record.emotion,
     content: record.content,

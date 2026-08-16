@@ -5,7 +5,7 @@ import AppIcon from './AppIcon.vue'
 import MoodMark from './MoodMark.vue'
 import { useArchiveStore } from '@/stores/archive'
 
-defineProps<{ record: MoodRecord }>()
+defineProps<{ record: MoodRecord; responding?: boolean }>()
 const emit = defineEmits<{ respond: [id: string]; open: [id: string] }>()
 const store = useArchiveStore()
 </script>
@@ -15,7 +15,7 @@ const store = useArchiveStore()
     <view class="record__head">
       <view class="author">
         <view class="avatar" :class="{ 'avatar--partner': record.authorId === 'partner' }">
-          <image v-if="record.authorId === 'me' && store.user.avatarUrl" class="avatar__image" :src="store.user.avatarUrl" mode="aspectFill" />
+          <image v-if="record.authorAvatarUrl || (record.authorId === 'me' && store.user.avatarUrl)" class="avatar__image" :src="record.authorAvatarUrl || store.user.avatarUrl" mode="aspectFill" />
           <text v-else>{{ record.authorName.slice(-1) }}</text>
         </view>
         <view>
@@ -43,6 +43,8 @@ const store = useArchiveStore()
           `action--${record.mood}`,
           { 'action--active': record.mood === 'happy' ? record.likedByPartner : record.huggedByPartner },
         ]"
+        :loading="responding"
+        :disabled="responding"
         @tap="emit('respond', record.id)"
       >
         <AppIcon

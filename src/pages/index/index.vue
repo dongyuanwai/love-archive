@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
+import LoadingIndicator from '@/components/LoadingIndicator.vue'
 import RecordCard from '@/components/RecordCard.vue'
 import SegmentControl from '@/components/SegmentControl.vue'
 import { useArchiveStore } from '@/stores/archive'
-import type { AuthorId } from '@/types/domain'
+import type { AuthorId, MoodRecord } from '@/types/domain'
 import { getTodayMoodStatus, listMoods, type MoodListScope, type TodayMoodStatus } from '@/api/moods'
 import { acceptRelationshipInvite, createRelationshipInvite, getCurrentRelationship } from '@/api/relationships'
 import { addReaction, removeReaction } from '@/api/reactions'
@@ -14,22 +15,45 @@ import { syncTabBarSelection } from '@/utils/tab-bar'
 
 const store = useArchiveStore()
 type ArchiveFilter = 'all' | 'me' | 'partner'
+interface FeedState {
+  items: MoodRecord[]
+  page: number
+  total: number
+  loaded: boolean
+  loading: boolean
+  loadingMore: boolean
+  error: string
+  loadMoreError: string
+}
+
+const filterKeys: ArchiveFilter[] = ['all', 'me', 'partner']
+const createFeedState = (): FeedState => ({
+  items: [],
+  page: 1,
+  total: 0,
+  loaded: false,
+  loading: false,
+  loadingMore: false,
+  error: '',
+  loadMoreError: '',
+})
 const filter = ref<ArchiveFilter>('all')
-const refreshKey = ref(0)
-const recordsLoading = ref(false)
-const loadingMore = ref(false)
-const recordsError = ref('')
-const loadMoreError = ref('')
-const currentPage = ref(1)
-const recordsTotal = ref(0)
+const feeds = reactive<Record<ArchiveFilter, FeedState>>({
+  all: createFeedState(),
+  me: createFeedState(),
+  partner: createFeedState(),
+})
 const pageSize = 10
 const todayStatus = ref<TodayMoodStatus | null>(null)
+const contextLoading = ref(false)
+const respondingId = ref('')
 const inviteLoading = ref(false)
 const inviteError = ref('')
 const bindingMode = ref<'invite' | 'enter'>('invite')
 const inviteInput = ref('')
 const bindingLoading = ref(false)
-let loadRequestId = 0
+const feedRequestIds: Record<ArchiveFilter, number> = { all: 0, me: 0, partner: 0 }
+let contextRequestId = 0
 
 const ensureInviteCode = async () => {
   if (!store.user.isLoggedIn || store.activeRelationship || store.inviteCode || inviteLoading.value) return
@@ -44,101 +68,142 @@ const ensureInviteCode = async () => {
   }
 }
 
-const listScope = computed<MoodListScope>(() => {
-  if (filter.value === 'me') return 'mine'
-  return filter.value
-})
-const hasMore = computed(() => store.records.length < recordsTotal.value)
-const showListEnd = computed(() => !hasMore.value && recordsTotal.value >= pageSize)
+const toListScope = (value: ArchiveFilter): MoodListScope => value === 'me' ? 'mine' : value
+const activeFeed = computed(() => feeds[filter.value])
+const records = computed(() => activeFeed.value.items)
+const recordsLoading = computed(() => activeFeed.value.loading)
+const loadingMore = computed(() => activeFeed.value.loadingMore)
+const recordsError = computed(() => activeFeed.value.error)
+const loadMoreError = computed(() => activeFeed.value.loadMoreError)
+const hasMore = computed(() => records.value.length < activeFeed.value.total)
+const showListEnd = computed(() => activeFeed.value.loaded && !hasMore.value && activeFeed.value.total >= pageSize)
 
-const loadRecords = async () => {
-  const requestId = ++loadRequestId
+const resetFeeds = () => {
+  filterKeys.forEach((key) => Object.assign(feeds[key], createFeedState()))
+}
+
+const updateCachedRecord = (record: MoodRecord) => {
+  filterKeys.forEach((key) => {
+    const index = feeds[key].items.findIndex((item) => item.id === record.id)
+    if (index >= 0) feeds[key].items[index] = record
+  })
+}
+
+const loadRecords = async (scope: ArchiveFilter = filter.value) => {
   if (!store.user.isLoggedIn) {
+    resetFeeds()
     store.replaceRecords([])
     store.setCurrentRelationship({ active: false, relationship: null })
-    recordsTotal.value = 0
-    currentPage.value = 1
     todayStatus.value = null
-    recordsError.value = ''
-    loadMoreError.value = ''
     return
   }
-  recordsLoading.value = true
-  recordsError.value = ''
-  loadMoreError.value = ''
+  const feed = feeds[scope]
+  const requestId = ++feedRequestIds[scope]
+  feed.loading = true
+  feed.error = ''
+  feed.loadMoreError = ''
   try {
-    const [moodPage, statusResult, relationshipResult] = await Promise.all([
-      listMoods({ page: 1, pageSize, scope: listScope.value }, store.user.id),
+    const moodPage = await listMoods({ page: 1, pageSize, scope: toListScope(scope) }, store.user.id)
+    if (requestId !== feedRequestIds[scope] || !store.user.isLoggedIn) return
+    feed.items = moodPage.items
+    feed.page = moodPage.pagination.page
+    feed.total = moodPage.pagination.total
+    feed.loaded = true
+    moodPage.items.forEach((record) => store.upsertRecord(record))
+  } catch (error) {
+    if (requestId !== feedRequestIds[scope] || !store.user.isLoggedIn) return
+    feed.error = error instanceof Error ? error.message : '心情列表加载失败'
+  } finally {
+    if (requestId === feedRequestIds[scope]) feed.loading = false
+  }
+}
+
+const loadPageContext = async () => {
+  const requestId = ++contextRequestId
+  if (!store.user.isLoggedIn) {
+    contextLoading.value = false
+    todayStatus.value = null
+    store.setCurrentRelationship({ active: false, relationship: null })
+    return
+  }
+  contextLoading.value = true
+  try {
+    const [statusResult, relationshipResult] = await Promise.all([
       getTodayMoodStatus(),
       getCurrentRelationship(),
     ])
-    if (requestId !== loadRequestId || !store.user.isLoggedIn) return
-    store.replaceRecords(moodPage.items)
-    currentPage.value = moodPage.pagination.page
-    recordsTotal.value = moodPage.pagination.total
+    if (requestId !== contextRequestId || !store.user.isLoggedIn) return
     todayStatus.value = statusResult
     store.setCurrentRelationship(relationshipResult)
     if (filter.value === 'partner' && !relationshipResult.active) void ensureInviteCode()
-    refreshKey.value++
   } catch (error) {
-    if (requestId !== loadRequestId || !store.user.isLoggedIn) return
-    recordsError.value = error instanceof Error ? error.message : '心情列表加载失败'
+    console.warn('首页状态加载失败', error)
   } finally {
-    recordsLoading.value = false
+    if (requestId === contextRequestId) contextLoading.value = false
   }
 }
 
 const loadMoreRecords = async () => {
-  if (!store.user.isLoggedIn || recordsLoading.value || loadingMore.value || !hasMore.value) return
-  loadingMore.value = true
-  loadMoreError.value = ''
+  const scope = filter.value
+  const feed = feeds[scope]
+  if (!store.user.isLoggedIn || feed.loading || feed.loadingMore || feed.items.length >= feed.total) return
+  feed.loadingMore = true
+  feed.loadMoreError = ''
   try {
     const moodPage = await listMoods(
-      { page: currentPage.value + 1, pageSize, scope: listScope.value },
+      { page: feed.page + 1, pageSize, scope: toListScope(scope) },
       store.user.id,
     )
-    store.appendRecords(moodPage.items)
-    currentPage.value = moodPage.pagination.page
-    recordsTotal.value = moodPage.pagination.total
+    const existingIds = new Set(feed.items.map((record) => record.id))
+    feed.items.push(...moodPage.items.filter((record) => !existingIds.has(record.id)))
+    feed.page = moodPage.pagination.page
+    feed.total = moodPage.pagination.total
+    moodPage.items.forEach((record) => store.upsertRecord(record))
   } catch (error) {
-    loadMoreError.value = error instanceof Error ? error.message : '加载更多心情失败'
+    feed.loadMoreError = error instanceof Error ? error.message : '加载更多心情失败'
   } finally {
-    loadingMore.value = false
+    feed.loadingMore = false
   }
 }
 
 onShow(() => {
   syncTabBarSelection()
+  filterKeys.forEach((key) => {
+    if (key !== filter.value) feeds[key].loaded = false
+  })
   void loadRecords()
+  void loadPageContext()
 })
 onReachBottom(loadMoreRecords)
 
 const filters = [
   { label: '全部', value: 'all' }, { label: '我的', value: 'me' }, { label: 'TA 的', value: 'partner' },
 ]
-const records = computed(() => {
-  refreshKey.value
-  return store.visibleFeed
-})
 const isUnboundPartnerView = computed(() => store.user.isLoggedIn && filter.value === 'partner' && !store.activeRelationship)
 const myTodayMoodId = computed(() => todayStatus.value?.mine?.id || null)
 const partnerTodayMoodId = computed(() => todayStatus.value?.partner.id || null)
 
 const openRecord = (id: string) => uni.navigateTo({ url: `/pages/record/detail?id=${id}` })
 const respondToMood = async (id: string) => {
-  const record = store.recordById(id)
+  const record = records.value.find((item) => item.id === id)
   if (!record) return
   if (record.authorId === 'me') {
     uni.showToast({ title: '这是你自己的心情', icon: 'none' })
     return
   }
+  if (respondingId.value) return
+  respondingId.value = id
   try {
     const hasReacted = record.mood === 'happy' ? record.likedByPartner : record.huggedByPartner
     if (hasReacted) await removeReaction(id)
     else await addReaction(id)
-    store.upsertRecord(await getMoodDetail(id, store.user.id))
+    const updatedRecord = await getMoodDetail(id, store.user.id)
+    updateCachedRecord(updatedRecord)
+    store.upsertRecord(updatedRecord)
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '回应失败，请稍后重试', icon: 'none' })
+  } finally {
+    respondingId.value = ''
   }
 }
 const goLogin = (target: 'create' | 'binding' | 'profile') => uni.navigateTo({ url: `/pages/login/index?target=${target}` })
@@ -156,9 +221,9 @@ const regenerateInvite = async () => {
   await ensureInviteCode()
 }
 const acceptInvite = () => {
-  const normalizedCode = inviteInput.value.trim().toUpperCase()
-  if (!/^LOVE-[A-Z2-9]{6}$/.test(normalizedCode)) {
-    uni.showToast({ title: '请输入完整有效的邀请码', icon: 'none' })
+  const normalizedCode = inviteInput.value.trim()
+  if (!/^\d{6}$/.test(normalizedCode)) {
+    uni.showToast({ title: '请输入 6 位数字邀请码', icon: 'none' })
     return
   }
   uni.showModal({
@@ -173,7 +238,8 @@ const acceptInvite = () => {
         await acceptRelationshipInvite(normalizedCode)
         store.setCurrentRelationship(await getCurrentRelationship())
         inviteInput.value = ''
-        await loadRecords()
+        feeds.partner.loaded = false
+        await Promise.all([loadPageContext(), loadRecords(filter.value)])
         uni.showToast({ title: '绑定成功', icon: 'success' })
       } catch (error) {
         uni.showToast({ title: error instanceof Error ? error.message : '绑定失败，请稍后重试', icon: 'none' })
@@ -191,9 +257,11 @@ const openTodayMood = (recordId: string | null, authorId: AuthorId) => {
 
 watch(filter, (value) => {
   if (value === 'partner' && !store.activeRelationship) void ensureInviteCode()
-  store.replaceRecords([])
-  recordsTotal.value = 0
-  void loadRecords()
+  if (!feeds[value].loaded && value !== 'all' && feeds.all.loaded) {
+    const authorId: AuthorId = value === 'me' ? 'me' : 'partner'
+    feeds[value].items = feeds.all.items.filter((record) => record.authorId === authorId)
+  }
+  if (!feeds[value].loaded) void loadRecords(value)
 })
 </script>
 
@@ -210,7 +278,10 @@ watch(filter, (value) => {
           <image v-if="store.user.avatarUrl" class="user-avatar-image" :src="store.user.avatarUrl" mode="aspectFill" />
           <text v-else>{{ store.user.initial }}</text>
         </view>
-        <view class="paired-avatar paired-avatar--partner">{{ store.activeRelationship?.partnerInitial || '?' }}</view>
+        <view class="paired-avatar paired-avatar--partner">
+          <image v-if="store.activeRelationship?.partnerAvatarUrl" class="user-avatar-image" :src="store.activeRelationship.partnerAvatarUrl" mode="aspectFill" />
+          <text v-else>{{ store.activeRelationship?.partnerInitial || '?' }}</text>
+        </view>
       </view>
     </view>
 
@@ -233,7 +304,8 @@ watch(filter, (value) => {
         <text class="section-title">今日心情信箱</text>
         <text class="inbox-heading__sub">不比较情绪，只认真听见彼此</text>
       </view>
-      <text class="inbox-heading__date">今天</text>
+      <LoadingIndicator v-if="contextLoading" text="正在同步" compact />
+      <text v-else class="inbox-heading__date">今天</text>
     </view>
     <view class="mood-inbox card">
       <view class="inbox-row" @tap="openTodayMood(myTodayMoodId, 'me')">
@@ -255,7 +327,10 @@ watch(filter, (value) => {
         class="inbox-row inbox-row--partner"
         @tap="openTodayMood(partnerTodayMoodId, 'partner')"
       >
-        <view class="inbox-avatar inbox-avatar--partner">{{ store.activeRelationship?.partnerInitial || '?' }}</view>
+        <view class="inbox-avatar inbox-avatar--partner">
+          <image v-if="store.activeRelationship?.partnerAvatarUrl" class="user-avatar-image" :src="store.activeRelationship.partnerAvatarUrl" mode="aspectFill" />
+          <text v-else>{{ store.activeRelationship?.partnerInitial || '?' }}</text>
+        </view>
         <view class="inbox-copy">
           <text class="inbox-title">
             {{ partnerTodayMoodId ? `${store.activeRelationship?.partnerName || 'TA'} 留下了一封心情` : store.activeRelationship ? '今天的信箱还很安静' : '邀请 TA 一起写下心情' }}
@@ -273,7 +348,10 @@ watch(filter, (value) => {
 
     <view class="feed-heading">
       <text class="section-title">心情存档</text>
-      <button class="quick-add" @tap="goCreate"><AppIcon name="plus" :size="17" />记录</button>
+      <button class="quick-add" @tap="goCreate">
+        <view class="quick-add__icon"><AppIcon name="plus" :size="17" /></view>
+        <text class="quick-add__text">记录</text>
+      </button>
     </view>
     <SegmentControl v-model="filter" :options="filters" />
 
@@ -300,28 +378,30 @@ watch(filter, (value) => {
       <template v-else>
         <view class="invite-enter-box">
           <text class="invite-code-box__label">输入 TA 发来的邀请码</text>
-          <input v-model="inviteInput" class="invite-code-input" maxlength="11" placeholder="例如 LOVE-A7K9Q2" confirm-type="done" @confirm="acceptInvite" />
+          <input v-model="inviteInput" class="invite-code-input" type="number" maxlength="6" placeholder="例如 083726" confirm-type="done" @confirm="acceptInvite" />
           <text class="invite-code-box__tip">绑定前的记录不会自动向对方公开</text>
         </view>
         <button class="invite-copy" :loading="bindingLoading" :disabled="bindingLoading" @tap="acceptInvite">确认并绑定</button>
       </template>
     </view>
     <view v-else-if="records.length" class="feed">
-      <RecordCard v-for="record in records" :key="record.id" :record="record" @respond="respondToMood" @open="openRecord" />
+      <view v-if="recordsLoading" class="feed-sync">
+        <LoadingIndicator text="正在同步心情记录" compact />
+      </view>
+      <RecordCard v-for="record in records" :key="record.id" :record="record" :responding="respondingId === record.id" @respond="respondToMood" @open="openRecord" />
       <view class="feed-footer">
-        <text v-if="loadingMore">正在打开更早的心情…</text>
+        <LoadingIndicator v-if="loadingMore" text="正在打开更早的心情…" compact />
         <button v-else-if="loadMoreError" @tap="loadMoreRecords">加载失败，点击重试</button>
         <text v-else-if="showListEnd">已经看完所有心情了</text>
       </view>
     </view>
     <view v-else-if="recordsLoading" class="empty-state card">
-      <text class="empty-state__title">正在打开你的心情存档</text>
-      <text class="empty-state__desc">请稍等一下。</text>
+      <LoadingIndicator text="正在打开你的心情存档…" />
     </view>
     <view v-else-if="recordsError" class="empty-state card">
       <text class="empty-state__title">心情存档暂时没有打开</text>
       <text class="empty-state__desc">{{ recordsError }}</text>
-      <button class="retry-button" @tap="loadRecords">重新加载</button>
+      <button class="retry-button" @tap="loadRecords()">重新加载</button>
     </view>
     <view v-else class="empty-state card">
       <text class="empty-state__title">这里还没有心情</text>
@@ -368,9 +448,13 @@ watch(filter, (value) => {
 .inbox-action--partner { background: #edf4f9; color: #607f98; }
 .feed-heading { display: flex; margin-top: 42rpx; align-items: center; justify-content: space-between; }
 .feed-heading .section-title { margin: 0; }
-.quick-add { display: flex; gap: 5rpx; min-height: 60rpx; padding: 0 8rpx; align-items: center; background: transparent; color: #a84f45; font-size: 25rpx; font-weight: 700; }
+.quick-add { display: flex; height: 60rpx; gap: 6rpx; margin: 0; padding: 0 8rpx; box-sizing: border-box; align-items: center; justify-content: center; border: 0; background: transparent; color: #a84f45; font-size: 25rpx; font-weight: 700; line-height: 1; }
+.quick-add::after { border: 0; }
+.quick-add__icon { display: flex; width: 34rpx; height: 34rpx; flex: none; align-items: center; justify-content: center; line-height: 1; }
+.quick-add__text { display: flex; height: 34rpx; align-items: center; justify-content: center; line-height: 1; }
 .feed-heading + :deep(.segments) { margin-top: 20rpx; }
 .feed { display: grid; gap: 24rpx; margin-top: 24rpx; }
+.feed-sync { display: flex; min-height: 42rpx; align-items: center; justify-content: center; }
 .feed-footer { display: flex; min-height: 72rpx; align-items: center; justify-content: center; color: #948681; font-size: 21rpx; text-align: center; }
 .feed-footer button { min-height: 64rpx; padding: 0 24rpx; background: transparent; color: #a45e53; font-size: 21rpx; line-height: 64rpx; }
 .empty-state { margin-top: 22rpx; }

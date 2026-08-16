@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
+import LoadingIndicator from '@/components/LoadingIndicator.vue'
 import MoodMark from '@/components/MoodMark.vue'
 import { useArchiveStore } from '@/stores/archive'
 import { formatDateTime } from '@/utils/date'
@@ -16,6 +17,7 @@ const editingCommentId = ref('')
 const editingComment = ref('')
 const record = computed(() => store.recordById(recordId.value))
 const detailLoading = ref(true)
+const detailRefreshing = ref(false)
 const detailError = ref('')
 const reactionLoading = ref(false)
 const commentSaving = ref(false)
@@ -26,7 +28,9 @@ const loadDetail = async () => {
     detailLoading.value = false
     return
   }
-  detailLoading.value = true
+  const isInitialLoad = !record.value
+  detailLoading.value = isInitialLoad
+  detailRefreshing.value = !isInitialLoad
   detailError.value = ''
   try {
     store.upsertRecord(await getMoodDetail(recordId.value, store.user.id))
@@ -34,6 +38,7 @@ const loadDetail = async () => {
     detailError.value = error instanceof Error ? error.message : '心情详情加载失败'
   } finally {
     detailLoading.value = false
+    detailRefreshing.value = false
   }
 }
 
@@ -107,13 +112,14 @@ const toggleReaction = async () => {
 
 <template>
   <view v-if="detailLoading" class="page-shell">
-    <view class="empty-state card"><text class="empty-state__title">正在打开这份心情</text><text class="empty-state__desc">请稍等一下。</text></view>
+    <view class="empty-state card"><LoadingIndicator text="正在打开这份心情…" /></view>
   </view>
   <view v-else-if="record" class="page-shell detail-page">
+    <LoadingIndicator v-if="detailRefreshing && !reactionLoading && !commentSaving" class="detail-sync" text="正在同步心情详情" compact />
     <view class="detail-card card" :class="`detail-card--${record.mood}`">
       <view class="detail-card__top">
         <view class="author">
-          <view class="avatar" :class="{ 'avatar--partner': record.authorId === 'partner' }"><image v-if="record.authorId === 'me' && store.user.avatarUrl" class="avatar__image" :src="store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ record.authorName.slice(-1) }}</text></view>
+          <view class="avatar" :class="{ 'avatar--partner': record.authorId === 'partner' }"><image v-if="record.authorAvatarUrl || (record.authorId === 'me' && store.user.avatarUrl)" class="avatar__image" :src="record.authorAvatarUrl || store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ record.authorName.slice(-1) }}</text></view>
           <view><text class="author__name">{{ record.authorName }}</text><text class="record-time">{{ formatDateTime(record.createdAt) }}</text></view>
         </view>
       </view>
@@ -158,7 +164,7 @@ const toggleReaction = async () => {
     </text>
     <view v-if="record.comments.length" class="comments card">
       <view v-for="item in record.comments" :key="item.id" class="comment-item">
-        <view class="comment-avatar"><image v-if="item.authorId === 'me' && store.user.avatarUrl" class="avatar__image" :src="store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ item.authorName.slice(-1) }}</text></view>
+        <view class="comment-avatar"><image v-if="item.authorAvatarUrl || (item.authorId === 'me' && store.user.avatarUrl)" class="avatar__image" :src="item.authorAvatarUrl || store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ item.authorName.slice(-1) }}</text></view>
         <view class="comment-body">
           <view class="comment-meta">
             <text>{{ item.authorName }}</text>
@@ -196,6 +202,7 @@ const toggleReaction = async () => {
 
 <style scoped lang="scss">
 .detail-card { padding: 30rpx; }
+.detail-sync { margin-bottom: 10rpx; }
 .detail-card--happy { background: linear-gradient(145deg, #fff, #fff3e9); }
 .detail-card--sad { background: linear-gradient(145deg, #fff, #eef4fa); }
 .detail-card__top, .author, .visibility, .reaction-card, .reaction, .comment-meta, .comment-box, .comments-closed { display: flex; align-items: center; }

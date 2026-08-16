@@ -29,7 +29,7 @@ const continueToTarget = () => {
     return
   }
   const tabPaths: Record<Exclude<LoginTarget, 'binding'>, string> = {
-    archive: '/pages/archive/index',
+    archive: '/pages/index/index',
     create: '/pages/create/index',
     insights: '/pages/insights/index',
     profile: '/pages/profile/index',
@@ -131,8 +131,8 @@ const completeRegistration = async () => {
       <button class="avatar-picker" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
         <image v-if="avatarPath" class="avatar-picker__image" :src="avatarPath" mode="aspectFill" />
         <view v-else class="avatar-picker__empty">
-          <AppIcon name="heart" :size="31" />
-          <text>选择头像</text>
+          <view class="avatar-picker__icon"><AppIcon name="heart" :size="28" /></view>
+          <text class="avatar-picker__label">选择头像</text>
         </view>
       </button>
 
@@ -171,7 +171,9 @@ const completeRegistration = async () => {
 .avatar-picker { display: flex; width: 142rpx; height: 142rpx; margin: 30rpx auto 0; padding: 0; overflow: hidden; align-items: center; justify-content: center; border: 2rpx dashed #e6c8bd; border-radius: 44rpx; background: #fff8f3; color: #a86d61; }
 .avatar-picker::after { border: 0; }
 .avatar-picker__image { width: 100%; height: 100%; }
-.avatar-picker__empty { display: flex; gap: 5rpx; flex-direction: column; align-items: center; justify-content: center; font-size: 19rpx; line-height: 1.2; }
+.avatar-picker__empty { display: flex; width: 100%; height: 100%; gap: 10rpx; flex-direction: column; align-items: center; justify-content: center; }
+.avatar-picker__icon { display: flex; width: 58rpx; height: 58rpx; flex: none; align-items: center; justify-content: center; line-height: 1; }
+.avatar-picker__label { display: block; height: 24rpx; flex: none; font-size: 19rpx; line-height: 24rpx; text-align: center; }
 .nickname-field { display: flex; min-height: 92rpx; margin-top: 26rpx; padding: 0 24rpx; align-items: center; border: 2rpx solid #eee2dc; border-radius: 26rpx; background: #fff; text-align: left; }
 .nickname-field__label { flex: 0 0 88rpx; color: #514541; font-size: 24rpx; font-weight: 700; }
 .nickname-field__input { min-width: 0; height: 92rpx; flex: 1; color: #352d2b; font-size: 25rpx; }

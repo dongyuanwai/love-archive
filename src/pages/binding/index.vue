@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
+import LoadingIndicator from '@/components/LoadingIndicator.vue'
 import { useArchiveStore } from '@/stores/archive'
 import { acceptRelationshipInvite, createRelationshipInvite, getCurrentRelationship, unbindCurrentRelationship } from '@/api/relationships'
 
@@ -10,6 +11,7 @@ const mode = ref<'invite' | 'enter'>('invite')
 const code = ref('')
 const redirectingToLogin = ref(false)
 const actionLoading = ref(false)
+const pageLoading = ref(false)
 
 const generateInvite = async () => {
   actionLoading.value = true
@@ -24,6 +26,7 @@ const generateInvite = async () => {
 
 onShow(async () => {
   if (!store.user.isLoggedIn) {
+    pageLoading.value = false
     if (redirectingToLogin.value) return
     redirectingToLogin.value = true
     uni.redirectTo({
@@ -32,12 +35,15 @@ onShow(async () => {
     })
     return
   }
+  pageLoading.value = true
   try {
     const current = await getCurrentRelationship()
     store.setCurrentRelationship(current)
     if (!current.active && !store.inviteCode) await generateInvite()
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '绑定状态加载失败', icon: 'none' })
+  } finally {
+    pageLoading.value = false
   }
 })
 
@@ -46,8 +52,8 @@ const copyCode = () => {
 }
 
 const join = () => {
-  if (!/^LOVE-[A-Z2-9]{6}$/.test(code.value.trim().toUpperCase())) {
-    uni.showToast({ title: '请输入有效邀请码', icon: 'none' })
+  if (!/^\d{6}$/.test(code.value.trim())) {
+    uni.showToast({ title: '请输入 6 位数字邀请码', icon: 'none' })
     return
   }
   uni.showModal({
@@ -102,9 +108,12 @@ const unbind = () => {
       <text class="binding-head__desc">绑定不是交出全部隐私，而是认真选择哪些时刻想让 TA 看见。</text>
     </view>
 
-    <template v-if="store.activeRelationship">
+    <view v-if="pageLoading" class="binding-loading card">
+      <LoadingIndicator text="正在确认绑定状态…" />
+    </view>
+    <template v-else-if="store.activeRelationship">
       <view class="bond-hero card">
-        <view class="bond-avatars"><view class="bond-avatar bond-avatar--me"><image v-if="store.user.avatarUrl" class="user-avatar-image" :src="store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ store.user.initial }}</text></view><view class="bond-line"><AppIcon name="heart" :size="17" filled color="#c96a5c" /></view><view class="bond-avatar bond-avatar--partner">{{ store.activeRelationship.partnerInitial }}</view></view>
+        <view class="bond-avatars"><view class="bond-avatar bond-avatar--me"><image v-if="store.user.avatarUrl" class="user-avatar-image" :src="store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ store.user.initial }}</text></view><view class="bond-line"><AppIcon name="heart" :size="17" filled color="#c96a5c" /></view><view class="bond-avatar bond-avatar--partner"><image v-if="store.activeRelationship.partnerAvatarUrl" class="user-avatar-image" :src="store.activeRelationship.partnerAvatarUrl" mode="aspectFill" /><text v-else>{{ store.activeRelationship.partnerInitial }}</text></view></view>
         <text class="bond-title">{{ store.user.name }} & {{ store.activeRelationship.partnerName }}</text>
         <text class="bond-desc">从 {{ store.activeRelationship.startedAt }} 开始共同存档</text>
         <view class="bond-stats"><view><text>{{ store.activeRelationship.daysTogether || 1 }}</text><span>陪伴天数</span></view><i/><view><text>{{ store.activeRelationship.sharedMoodCount || 0 }}</text><span>共同可见记录</span></view><i/><view><text>{{ store.activeRelationship.responseCount || 0 }}</text><span>温柔回应</span></view></view>
@@ -115,7 +124,7 @@ const unbind = () => {
         <view class="rule-row"><view><AppIcon name="calendar" :size="18" /></view><text>TA 只能看到本次绑定开始后公开的记录。</text></view>
         <view class="rule-row"><view><AppIcon name="trend" :size="18" /></view><text>对方看到的统计不包含你的私密记录。</text></view>
       </view>
-      <button class="danger-button unbind-button" @tap="unbind">解除绑定</button>
+      <button class="danger-button unbind-button" :loading="actionLoading" :disabled="actionLoading" @tap="unbind">{{ actionLoading ? '正在解除…' : '解除绑定' }}</button>
       <text class="unbind-tip">解除后立即停止共享；你自己的记录和过去收到的互动仍会为你保留。</text>
     </template>
 
@@ -132,7 +141,7 @@ const unbind = () => {
       <view v-else class="enter-card card">
         <view class="invite-icon"><AppIcon name="heart" :size="28" /></view>
         <text class="invite-label">输入 TA 发来的邀请码</text>
-        <input v-model="code" class="code-input" maxlength="11" placeholder="例如 LOVE-A7K9Q2" />
+        <input v-model="code" class="code-input" type="number" maxlength="6" placeholder="例如 083726" />
         <button class="primary-button" :loading="actionLoading" :disabled="actionLoading" @tap="join">确认并绑定</button>
       </view>
       <view class="before-bind card"><text>绑定前请放心</text><view><i/>以前的记录不会自动向 TA 开放</view><view><i/>以后发布时仍能选择“仅自己可见”</view><view><i/>每个人同时只能绑定一位对象</view></view>
@@ -142,6 +151,7 @@ const unbind = () => {
 
 <style scoped lang="scss">
 .binding-head{padding:14rpx 6rpx 31rpx}.binding-head__title{display:block;max-width:620rpx;margin-top:15rpx;font-size:42rpx;font-weight:750;line-height:1.4}.binding-head__desc{display:block;margin-top:12rpx;color:#837471;font-size:24rpx;line-height:1.7}
+.binding-loading{margin-top:6rpx}
 .bond-hero{padding:43rpx 25rpx;text-align:center;background:linear-gradient(145deg,#fff,#fff0e6)}.bond-avatars{display:flex;align-items:center;justify-content:center}.bond-avatar{display:flex;width:105rpx;height:105rpx;align-items:center;justify-content:center;border-radius:36rpx;background:#f7bb98;color:#79483b;font-size:35rpx;font-weight:750}.bond-avatar--partner{background:#c8dae8;color:#506b82}.bond-line{display:flex;width:78rpx;align-items:center;justify-content:center}.bond-line::before,.bond-line::after{content:'';width:18rpx;border-top:1rpx solid #dba99d}.bond-title,.bond-desc{display:block}.bond-title{margin-top:24rpx;font-size:34rpx;font-weight:750}.bond-desc{margin-top:9rpx;color:#8d7d79;font-size:22rpx}.bond-stats{display:flex;margin-top:34rpx;align-items:center;justify-content:center}.bond-stats>view{flex:1}.bond-stats text,.bond-stats span{display:block}.bond-stats text{font-size:31rpx;font-weight:750}.bond-stats span{margin-top:5rpx;color:#92827e;font-size:18rpx}.bond-stats i{width:1rpx;height:48rpx;background:#e9d8d0}
 .user-avatar-image{display:block;width:100%;height:100%;border-radius:inherit}
 .rules{margin-top:22rpx;padding:27rpx}.rules__title{font-size:27rpx;font-weight:750}.rule-row{display:flex;gap:15rpx;margin-top:23rpx;align-items:center;color:#766764;font-size:22rpx;line-height:1.55}.rule-row>view{display:flex;width:53rpx;height:53rpx;flex:none;align-items:center;justify-content:center;border-radius:18rpx;background:#f8eee8;color:#956157}.unbind-button{margin-top:27rpx}.unbind-tip{display:block;margin:16rpx 20rpx 0;color:#9a8b87;font-size:20rpx;line-height:1.6;text-align:center}

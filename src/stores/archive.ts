@@ -9,7 +9,7 @@ const userStorageKey = 'love-archive:test-new-user'
 const inviteStorageKey = 'love-archive:relationship-invite'
 const defaultUser: UserProfile = { name: '微信用户', initial: '微', avatarUrl: '', isLoggedIn: false }
 const createEmptyRelationship = (): Relationship => ({
-  id: '', partnerName: '', partnerInitial: '', startedAt: '', active: false,
+  id: '', partnerName: '', partnerInitial: '', partnerAvatarUrl: '', startedAt: '', active: false,
 })
 
 const getStoredUser = (): UserProfile => {
@@ -53,7 +53,7 @@ export const useArchiveStore = defineStore('archive', {
   getters: {
     activeRelationship: (state) => state.relationship.active ? state.relationship : null,
     visibleFeed(state): MoodRecord[] {
-      return state.records
+      return [...state.records]
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     },
     recordById: (state) => (id: string) => state.records.find((record) => record.id === id),
@@ -129,6 +129,7 @@ export const useArchiveStore = defineStore('archive', {
         id: result.relationship.id,
         partnerName,
         partnerInitial: partnerName.slice(-1),
+        partnerAvatarUrl: resolveAssetUrl(result.relationship.partner.avatarUrl),
         startedAt: result.relationship.startedAt.slice(0, 10),
         active: true,
         daysTogether: result.relationship.stats.daysTogether,
