@@ -13,6 +13,7 @@
       "postcss": true,
       "minified": true
     },
+    "lazyCodeLoading": "requiredComponents",
     "usingComponents": true
   },
   "vueVersion": "3"

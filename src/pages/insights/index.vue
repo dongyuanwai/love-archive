@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
-import LoadingIndicator from '@/components/LoadingIndicator.vue'
 import MoodMark from '@/components/MoodMark.vue'
 import SegmentControl from '@/components/SegmentControl.vue'
 import { useArchiveStore } from '@/stores/archive'
@@ -15,7 +14,8 @@ const owner = ref<InsightSubject>('mine')
 const range = ref<InsightPeriod>('week')
 const summary = ref<InsightSummary | null>(null)
 const calendarSummary = ref<InsightSummary | null>(null)
-const reportLoading = ref(false)
+const reportLoading = ref(store.user.isLoggedIn)
+const reportReady = ref(false)
 const reportError = ref('')
 const ownerOptions = computed(() => [
   { label: '我的情绪', value: 'mine' },
@@ -92,9 +92,9 @@ const loadReport = async () => {
     calendarSummary.value = calendarResult
   } catch (error) {
     reportError.value = error instanceof Error ? error.message : '情绪报告加载失败'
-    summary.value = null
   } finally {
     reportLoading.value = false
+    reportReady.value = true
   }
 }
 
@@ -113,8 +113,32 @@ watch([owner, range], loadReport)
       <text class="insights-head__desc">统计只是一面小镜子，不为情绪打分。</text>
     </view>
 
-    <view v-if="reportLoading && !summary" class="empty-state card insights-empty">
-      <LoadingIndicator text="正在整理情绪报告…" />
+    <view v-if="reportLoading && !reportReady" class="insights-skeleton" aria-label="正在整理情绪报告">
+      <view class="skeleton-block skeleton-owner" />
+
+      <view class="section-heading calendar-heading">
+        <view><view class="skeleton-block skeleton-line skeleton-heading-title" /><view class="skeleton-block skeleton-line skeleton-heading-desc" /></view>
+        <view class="skeleton-block skeleton-line skeleton-legend" />
+      </view>
+      <view class="calendar-card card skeleton-card">
+        <view class="week-row"><text v-for="item in ['一','二','三','四','五','六','日']" :key="item">{{ item }}</text></view>
+        <view class="days-grid"><view v-for="item in 42" :key="item" class="day skeleton-block skeleton-day" /></view>
+      </view>
+
+      <view class="range-tabs skeleton-tabs">
+        <view v-for="item in 3" :key="item" class="skeleton-block skeleton-pill" />
+      </view>
+
+      <view class="overview card skeleton-card skeleton-overview">
+        <view class="overview__head"><view><view class="skeleton-block skeleton-line skeleton-kicker" /><view class="skeleton-block skeleton-line skeleton-overview-title" /></view><view class="skeleton-block skeleton-line skeleton-period" /></view>
+        <view class="skeleton-balance"><view class="skeleton-block skeleton-mood" /><view class="skeleton-block skeleton-mood" /></view>
+        <view class="skeleton-block skeleton-bar" />
+        <view class="skeleton-block skeleton-line skeleton-note" />
+      </view>
+
+      <view class="stats-grid">
+        <view v-for="item in 4" :key="item" class="stat-card card skeleton-card skeleton-stat"><view class="skeleton-block skeleton-stat-icon" /><view class="skeleton-block skeleton-line skeleton-stat-value" /><view class="skeleton-block skeleton-line skeleton-stat-label" /></view>
+      </view>
     </view>
     <view v-else-if="reportError && !summary" class="empty-state card insights-empty">
       <text class="empty-state__title">情绪报告暂时无法打开</text>
@@ -122,7 +146,7 @@ watch([owner, range], loadReport)
       <button class="report-retry" @tap="loadReport">重新加载</button>
     </view>
     <template v-else-if="hasRecords">
-    <LoadingIndicator v-if="reportLoading" class="report-sync" text="正在同步情绪报告" compact />
+    <view class="report-content" :class="{ 'report-content--refreshing': reportLoading }">
     <SegmentControl v-model="owner" :options="ownerOptions" class="owner-switch" />
 
     <view class="section-heading calendar-heading"><view><text class="section-title">情绪日历</text><text class="section-desc">{{ currentMonthLabel }}</text></view><view class="calendar-legend"><span><i class="happy"/>开心</span><span><i class="sad"/>难过</span></view></view>
@@ -158,6 +182,7 @@ watch([owner, range], loadReport)
     </view>
 
     <view class="privacy-tip"><AppIcon name="lock" :size="14" /><text>{{ owner === 'mine' ? '这里包含你的全部记录；仅自己可见的内容不会进入 TA 看到的统计。' : '你只能看到 TA 在本段关系中对你公开的记录统计。' }}</text></view>
+    </view>
     </template>
     <view v-else class="empty-state card insights-empty">
       <text class="empty-state__title">还没有可回顾的心情</text>
@@ -199,9 +224,9 @@ watch([owner, range], loadReport)
 .stat-value,.stat-label{display:block}.stat-value{margin-top:16rpx;font-size:31rpx;font-weight:750}.stat-label{margin-top:5rpx;color:#938480;font-size:21rpx}
 .calendar-heading { margin-top: 28rpx; }
 .owner-switch { margin-top: 0; }
-.report-sync { margin-bottom: 10rpx; }
 .calendar-legend { gap: 14rpx; color: #8f807c; font-size: 19rpx; }.calendar-legend span{gap:5rpx}.calendar-legend i{width:12rpx;height:12rpx;border-radius:50%}.calendar-legend .happy{background:#f0a477}.calendar-legend .sad{background:#91aeca}
 .calendar-card { margin-top: 18rpx; padding: 25rpx 20rpx; }.week-row{margin-bottom:14rpx}.days-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8rpx}.day{display:flex;height:68rpx;flex-direction:column;align-items:center;justify-content:center;border-radius:18rpx;color:#736461;font-size:22rpx}.day i{width:8rpx;height:8rpx;margin-top:5rpx;border-radius:50%;background:currentColor}.day--happy{background:#fff0e3;color:#a76848}.day--sad{background:#e9f0f6;color:#5e7890}
 .privacy-tip { gap: 10rpx; margin: 22rpx 8rpx 0; align-items: flex-start; color: #958682; font-size: 20rpx; line-height: 1.6; }
-@media (prefers-reduced-motion: reduce) { .balance-bar__happy { transition: none; } }
+.insights-skeleton,.report-content{display:block}.skeleton-block{overflow:hidden;background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}.skeleton-line{border-radius:999rpx}.skeleton-owner{height:80rpx;border-radius:22rpx}.skeleton-heading-title{width:142rpx;height:36rpx}.skeleton-heading-desc{width:122rpx;height:21rpx;margin-top:7rpx}.skeleton-legend{width:136rpx;height:24rpx}.skeleton-card{pointer-events:none}.skeleton-day{border-radius:18rpx}.skeleton-tabs{align-items:center}.skeleton-pill{width:112rpx;height:62rpx;border-radius:999rpx}.skeleton-overview{min-height:330rpx}.skeleton-kicker{width:94rpx;height:21rpx}.skeleton-overview-title{width:238rpx;height:31rpx;margin-top:6rpx}.skeleton-period{width:170rpx;height:20rpx}.skeleton-balance{display:flex;margin-top:30rpx;align-items:center;justify-content:space-between}.skeleton-mood{width:205rpx;height:72rpx;border-radius:22rpx}.skeleton-bar{height:16rpx;margin-top:24rpx;border-radius:99rpx}.skeleton-note{width:78%;height:22rpx;margin-top:21rpx}.skeleton-stat{min-height:190rpx}.skeleton-stat-icon{width:57rpx;height:57rpx;border-radius:19rpx}.skeleton-stat-value{width:92rpx;height:31rpx;margin-top:16rpx}.skeleton-stat-label{width:106rpx;height:21rpx;margin-top:5rpx}.report-content--refreshing .calendar-card,.report-content--refreshing .overview,.report-content--refreshing .stat-card{position:relative;overflow:hidden;pointer-events:none}.report-content--refreshing .calendar-card::after,.report-content--refreshing .overview::after,.report-content--refreshing .stat-card::after{position:absolute;z-index:2;inset:0;content:'';background:linear-gradient(100deg,rgba(255,250,248,.34) 20%,rgba(245,226,225,.72) 42%,rgba(255,250,248,.34) 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}@keyframes skeleton-shimmer{to{background-position:-220% 0}}
+@media (prefers-reduced-motion: reduce) { .balance-bar__happy { transition: none; }.skeleton-block,.report-content--refreshing .calendar-card::after,.report-content--refreshing .overview::after,.report-content--refreshing .stat-card::after{animation:none} }
 </style>

@@ -39,13 +39,14 @@ const createFeedState = (): FeedState => ({
 })
 const filter = ref<ArchiveFilter>('all')
 const feeds = reactive<Record<ArchiveFilter, FeedState>>({
-  all: createFeedState(),
+  all: { ...createFeedState(), loading: store.user.isLoggedIn },
   me: createFeedState(),
   partner: createFeedState(),
 })
 const pageSize = 10
 const todayStatus = ref<TodayMoodStatus | null>(null)
-const contextLoading = ref(false)
+const contextLoading = ref(store.user.isLoggedIn)
+const contextReady = ref(false)
 const respondingId = ref('')
 const inviteLoading = ref(false)
 const inviteError = ref('')
@@ -122,6 +123,7 @@ const loadPageContext = async () => {
   const requestId = ++contextRequestId
   if (!store.user.isLoggedIn) {
     contextLoading.value = false
+    contextReady.value = true
     todayStatus.value = null
     store.setCurrentRelationship({ active: false, relationship: null })
     return
@@ -139,7 +141,10 @@ const loadPageContext = async () => {
   } catch (error) {
     console.warn('首页状态加载失败', error)
   } finally {
-    if (requestId === contextRequestId) contextLoading.value = false
+    if (requestId === contextRequestId) {
+      contextLoading.value = false
+      contextReady.value = true
+    }
   }
 }
 
@@ -285,7 +290,15 @@ watch(filter, (value) => {
       </view>
     </view>
 
-    <view v-if="store.activeRelationship" class="bond-card card" @tap="goBinding">
+    <view v-if="contextLoading && !contextReady" class="bond-card card home-skeleton" aria-label="正在加载关系状态">
+      <view class="bond-card__icon skeleton-block" />
+      <view class="bond-card__copy">
+        <view class="skeleton-block skeleton-line skeleton-bond-title" />
+        <view class="skeleton-block skeleton-line skeleton-bond-desc" />
+      </view>
+      <view class="skeleton-block skeleton-chevron" />
+    </view>
+    <view v-else-if="store.activeRelationship" class="bond-card card" :class="{ 'data-card--refreshing': contextLoading }" @tap="goBinding">
       <view class="bond-card__icon"><text class="bond-heart">♥</text></view>
       <view class="bond-card__copy">
         <text class="bond-card__title">正在和 {{ store.activeRelationship.partnerName }} 共同存档</text>
@@ -293,7 +306,7 @@ watch(filter, (value) => {
       </view>
       <AppIcon name="chevron" :size="17" color="#a89691" />
     </view>
-    <view v-else class="bond-card card" @tap="goBinding">
+    <view v-else class="bond-card card" :class="{ 'data-card--refreshing': contextLoading }" @tap="goBinding">
       <view class="bond-card__icon"><text class="bond-heart">♥</text></view>
       <view class="bond-card__copy"><text class="bond-card__title">邀请你的对象共同存档</text><text class="bond-card__desc">未绑定时也可以安心独自记录</text></view>
       <AppIcon name="chevron" :size="17" color="#a89691" />
@@ -304,10 +317,19 @@ watch(filter, (value) => {
         <text class="section-title">今日心情信箱</text>
         <text class="inbox-heading__sub">不比较情绪，只认真听见彼此</text>
       </view>
-      <LoadingIndicator v-if="contextLoading" text="正在同步" compact />
-      <text v-else class="inbox-heading__date">今天</text>
+      <text class="inbox-heading__date">今天</text>
     </view>
-    <view class="mood-inbox card">
+    <view v-if="contextLoading && !contextReady" class="mood-inbox card home-skeleton" aria-label="正在加载今日心情">
+      <view v-for="item in 2" :key="item" class="inbox-row">
+        <view class="inbox-avatar skeleton-block" />
+        <view class="inbox-copy">
+          <view class="skeleton-block skeleton-line skeleton-inbox-title" />
+          <view class="skeleton-block skeleton-line skeleton-inbox-desc" />
+        </view>
+        <view class="skeleton-block skeleton-inbox-action" />
+      </view>
+    </view>
+    <view v-else class="mood-inbox card" :class="{ 'data-card--refreshing': contextLoading }">
       <view class="inbox-row" @tap="openTodayMood(myTodayMoodId, 'me')">
         <view class="inbox-avatar">
           <image v-if="store.user.avatarUrl" class="user-avatar-image" :src="store.user.avatarUrl" mode="aspectFill" />
@@ -384,10 +406,7 @@ watch(filter, (value) => {
         <button class="invite-copy" :loading="bindingLoading" :disabled="bindingLoading" @tap="acceptInvite">确认并绑定</button>
       </template>
     </view>
-    <view v-else-if="records.length" class="feed">
-      <view v-if="recordsLoading" class="feed-sync">
-        <LoadingIndicator text="正在同步心情记录" compact />
-      </view>
+    <view v-else-if="records.length" class="feed" :class="{ 'feed--refreshing': recordsLoading }">
       <RecordCard v-for="record in records" :key="record.id" :record="record" :responding="respondingId === record.id" @respond="respondToMood" @open="openRecord" />
       <view class="feed-footer">
         <LoadingIndicator v-if="loadingMore" text="正在打开更早的心情…" compact />
@@ -395,8 +414,16 @@ watch(filter, (value) => {
         <text v-else-if="showListEnd">已经看完所有心情了</text>
       </view>
     </view>
-    <view v-else-if="recordsLoading" class="empty-state card">
-      <LoadingIndicator text="正在打开你的心情存档…" />
+    <view v-else-if="recordsLoading" class="feed feed-skeleton" aria-label="正在加载心情存档">
+      <view v-for="item in 2" :key="item" class="record-skeleton card home-skeleton">
+        <view class="record-skeleton__head">
+          <view class="skeleton-record-author"><view class="skeleton-block skeleton-record-avatar" /><view><view class="skeleton-block skeleton-line skeleton-record-name" /><view class="skeleton-block skeleton-line skeleton-record-time" /></view></view>
+          <view class="skeleton-block skeleton-record-chip" />
+        </view>
+        <view class="skeleton-block skeleton-line skeleton-record-content skeleton-record-content--long" />
+        <view class="skeleton-block skeleton-line skeleton-record-content" />
+        <view class="record-skeleton__footer"><view class="skeleton-block skeleton-record-action" /><view class="skeleton-block skeleton-record-action skeleton-record-action--wide" /></view>
+      </view>
     </view>
     <view v-else-if="recordsError" class="empty-state card">
       <text class="empty-state__title">心情存档暂时没有打开</text>
@@ -454,10 +481,10 @@ watch(filter, (value) => {
 .quick-add__text { display: flex; height: 34rpx; align-items: center; justify-content: center; line-height: 1; }
 .feed-heading + :deep(.segments) { margin-top: 20rpx; }
 .feed { display: grid; gap: 24rpx; margin-top: 24rpx; }
-.feed-sync { display: flex; min-height: 42rpx; align-items: center; justify-content: center; }
 .feed-footer { display: flex; min-height: 72rpx; align-items: center; justify-content: center; color: #948681; font-size: 21rpx; text-align: center; }
 .feed-footer button { min-height: 64rpx; padding: 0 24rpx; background: transparent; color: #a45e53; font-size: 21rpx; line-height: 64rpx; }
 .empty-state { margin-top: 22rpx; }
 .retry-button, .empty-create { display: flex; min-height: 72rpx; margin: 22rpx auto 0; padding: 0 28rpx; align-items: center; justify-content: center; border-radius: 20rpx; background: #d87263; color: #fff; font-size: 23rpx; font-weight: 700; line-height: 1; }
+.home-skeleton{pointer-events:none}.skeleton-block{overflow:hidden;border:0;background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}.skeleton-line{border-radius:999rpx}.home-skeleton .bond-card__icon{background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%}.skeleton-bond-title{width:260rpx;height:27rpx}.skeleton-bond-desc{width:182rpx;height:22rpx;margin-top:7rpx}.skeleton-chevron{width:17rpx;height:29rpx;flex:none;border-radius:999rpx}.home-skeleton .inbox-avatar{background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%}.skeleton-inbox-title{width:250rpx;height:25rpx}.skeleton-inbox-desc{width:310rpx;height:21rpx;margin-top:8rpx}.skeleton-inbox-action{width:124rpx;height:66rpx;flex:none;margin-left:12rpx;border-radius:19rpx}.record-skeleton{min-height:300rpx;padding:28rpx 26rpx 24rpx}.record-skeleton__head,.skeleton-record-author,.record-skeleton__footer{display:flex;align-items:center}.record-skeleton__head{justify-content:space-between}.skeleton-record-author{gap:18rpx}.skeleton-record-avatar{width:68rpx;height:68rpx;flex:none;border-radius:21rpx}.skeleton-record-name{width:116rpx;height:26rpx}.skeleton-record-time{width:142rpx;height:22rpx;margin-top:7rpx}.skeleton-record-chip{width:112rpx;height:48rpx;border-radius:999rpx}.skeleton-record-content{width:82%;height:26rpx;margin-top:14rpx}.skeleton-record-content--long{width:100%;margin-top:28rpx}.record-skeleton__footer{gap:16rpx;margin-top:25rpx;padding-top:19rpx;border-top:1rpx solid #f1e8e3}.skeleton-record-action{width:128rpx;height:50rpx;border-radius:16rpx}.skeleton-record-action--wide{flex:1}.data-card--refreshing,.feed--refreshing{position:relative;overflow:hidden;pointer-events:none}.data-card--refreshing::after,.feed--refreshing::after{position:absolute;z-index:5;inset:0;content:'';background:linear-gradient(100deg,rgba(255,250,248,.28) 20%,rgba(245,226,225,.68) 42%,rgba(255,250,248,.28) 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}.feed--refreshing::after{border-radius:26rpx}@keyframes skeleton-shimmer{to{background-position:-220% 0}}@media(prefers-reduced-motion:reduce){.skeleton-block,.data-card--refreshing::after,.feed--refreshing::after{animation:none}}
 .partner-invite-empty { margin-top: 24rpx; padding: 38rpx 30rpx 30rpx; text-align: center; background: linear-gradient(145deg,#fff,#fff5ed); }.partner-invite-empty__icon{display:flex;width:82rpx;height:82rpx;margin:0 auto;align-items:center;justify-content:center;border-radius:28rpx;background:#eaf2f8;color:#607f98}.partner-invite-empty__title,.partner-invite-empty__desc{display:block}.partner-invite-empty__title{margin-top:22rpx;font-size:30rpx;font-weight:750}.partner-invite-empty__desc{margin:12rpx auto 0;color:#81736f;font-size:22rpx;line-height:1.65}.binding-mode{display:flex;margin-top:26rpx;padding:6rpx;border-radius:20rpx;background:#efe5df}.binding-mode button{display:flex;height:64rpx;flex:1;align-items:center;justify-content:center;border-radius:16rpx;background:transparent;color:#897a76;font-size:23rpx;line-height:1}.binding-mode button.active{background:#fff;color:#9c564d;font-weight:700;box-shadow:0 5rpx 15rpx rgba(90,65,55,.08)}.invite-code-box,.invite-enter-box{margin-top:20rpx;padding:23rpx;border:1rpx dashed #dfc8bb;border-radius:24rpx;background:#fffaf6}.invite-code-box__label,.invite-code-box__value,.invite-code-box__status,.invite-code-box__tip{display:block}.invite-code-box__label{color:#8b7c77;font-size:20rpx}.invite-code-box__value{margin-top:10rpx;color:#77483f;font-size:38rpx;font-weight:800;letter-spacing:5rpx}.invite-code-box__status{margin-top:12rpx;color:#897a76;font-size:23rpx}.invite-code-box__tip{margin-top:10rpx;color:#9d8e8a;font-size:19rpx}.invite-code-input{height:88rpx;margin-top:16rpx;border:1rpx solid #e8d9d1;border-radius:21rpx;background:#fff;color:#674842;font-size:29rpx;font-weight:750;letter-spacing:3rpx;text-align:center}.invite-copy{display:flex;min-height:80rpx;margin-top:22rpx;align-items:center;justify-content:center;border-radius:22rpx;background:#d87263;color:#fff;font-size:25rpx;font-weight:700;line-height:1}.invite-secondary{min-height:62rpx;margin:10rpx auto 0;background:transparent;color:#8f6058;font-size:22rpx;line-height:62rpx}.invite-copy[disabled],.invite-secondary[disabled]{opacity:.58}
 </style>
