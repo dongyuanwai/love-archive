@@ -7,7 +7,7 @@ export const formatDateTime = (date: string) => {
   const direct = new Date(date)
   const parsed = Number.isNaN(direct.getTime()) ? new Date(date.replace(/-/g, '/')) : direct
   const minute = String(parsed.getMinutes()).padStart(2, '0')
-  return `${parsed.getMonth() + 1}月${parsed.getDate()}日 ${parsed.getHours()}:${minute}`
+  return `${parsed.getFullYear()}年${parsed.getMonth() + 1}月${parsed.getDate()}日 ${parsed.getHours()}:${minute}`
 }
 
 export const todayString = () => {

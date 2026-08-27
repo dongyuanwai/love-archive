@@ -169,7 +169,7 @@ const toggleReaction = async () => {
           <view class="comment-meta">
             <text>{{ item.authorName }}</text>
             <view class="comment-meta__actions">
-              <text>{{ item.createdAt }}</text>
+              <text>{{ formatDateTime(item.createdAt) }}</text>
               <text v-if="item.isEdited" class="edited-tag">已编辑</text>
               <button
                 v-if="item.authorId === 'me' && editingCommentId !== item.id"
