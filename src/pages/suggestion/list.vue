@@ -8,15 +8,12 @@ import { getSuggestionList } from '@/api/suggestions'
 import type { SuggestionListItem, SuggestionType } from '@/api/suggestions'
 import { formatDateTime } from '@/utils/date'
 
-type FilterType = 'ALL' | SuggestionType
-
-const filter = ref<FilterType>('ALL')
+const filter = ref<SuggestionType>('ISSUE')
 const items = ref<SuggestionListItem[]>([])
 const nextCursor = ref<string | null>(null)
 const loading = ref(false)
 const loadingMore = ref(false)
-const filterOptions: { label: string; value: FilterType }[] = [
-  { label: '全部', value: 'ALL' },
+const filterOptions: { label: string; value: SuggestionType }[] = [
   { label: '问题反馈', value: 'ISSUE' },
   { label: '建议', value: 'SUGGESTION' },
 ]
@@ -41,7 +38,7 @@ const load = async (reset = false) => {
   else loadingMore.value = true
   try {
     const result = await getSuggestionList({
-      type: filter.value === 'ALL' ? undefined : filter.value,
+      type: filter.value,
       cursor: reset ? undefined : nextCursor.value || undefined,
       limit: 20,
     })
@@ -91,7 +88,6 @@ onReachBottom(() => load(false))
           <text class="feedback-type" :class="`feedback-type--${item.type.toLowerCase()}`">{{ item.type === 'ISSUE' ? '问题反馈' : '建议' }}</text>
         </view>
         <text class="feedback-content">{{ item.content }}</text>
-        <text v-if="item.appVersion" class="feedback-version">版本 {{ item.appVersion }}</text>
       </view>
       <view class="list-footer">
         <text v-if="loadingMore">正在加载更多…</text>
@@ -127,7 +123,6 @@ onReachBottom(() => load(false))
 .feedback-type--issue { background: #eaf1f6; color: #607b91; }
 .feedback-type--suggestion { background: #ffeadf; color: #9a594e; }
 .feedback-content { display: block; margin-top: 22rpx; color: #504441; font-size: 25rpx; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
-.feedback-version { display: block; margin-top: 18rpx; color: #a0918d; font-size: 19rpx; }
 .list-footer { display: flex; min-height: 72rpx; align-items: center; justify-content: center; color: #9a8b87; font-size: 20rpx; }
 .empty-card { display: flex; min-height: 330rpx; margin-top: 22rpx; padding: 40rpx; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .empty-card__icon { display: flex; width: 82rpx; height: 82rpx; align-items: center; justify-content: center; border-radius: 28rpx; background: #ffeadf; color: #9a594e; }

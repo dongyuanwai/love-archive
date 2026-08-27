@@ -5,7 +5,6 @@ import SegmentControl from '@/components/SegmentControl.vue'
 import { submitSuggestion } from '@/api/suggestions'
 import type { SuggestionType } from '@/api/suggestions'
 
-const MIN_LENGTH = 5
 const MAX_LENGTH = 1000
 const type = ref<SuggestionType>('ISSUE')
 const content = ref('')
@@ -15,7 +14,7 @@ const typeOptions: { label: string; value: SuggestionType }[] = [
   { label: '建议', value: 'SUGGESTION' },
 ]
 const trimmedContent = computed(() => content.value.trim())
-const canSubmit = computed(() => trimmedContent.value.length >= MIN_LENGTH && !submitting.value)
+const canSubmit = computed(() => trimmedContent.value.length > 0 && !submitting.value)
 const isIssue = computed(() => type.value === 'ISSUE')
 const inputPlaceholder = computed(() => isIssue.value
   ? '请描述你遇到的问题，以及当时进行了什么操作……'
@@ -23,8 +22,8 @@ const inputPlaceholder = computed(() => isIssue.value
 
 const submit = async () => {
   if (submitting.value) return
-  if (trimmedContent.value.length < MIN_LENGTH) {
-    uni.showToast({ title: `请至少写下 ${MIN_LENGTH} 个字`, icon: 'none' })
+  if (!trimmedContent.value) {
+    uni.showToast({ title: '请写下反馈或建议内容', icon: 'none' })
     return
   }
 
