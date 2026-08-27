@@ -27,6 +27,14 @@
     {
       "path": "pages/login/index",
       "style": { "navigationBarTitleText": "微信登录" }
+    },
+    {
+      "path": "pages/suggestion/index",
+      "style": { "navigationBarTitleText": "意见与建议" }
+    },
+    {
+      "path": "pages/suggestion/list",
+      "style": { "navigationBarTitleText": "反馈与建议" }
     }
   ],
   "tabBar": {

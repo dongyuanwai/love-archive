@@ -10,6 +10,7 @@ export interface MyProfile {
   updatedAt?: string
   moodCount?: number
   status?: 'ACTIVE' | 'DISABLED'
+  canManageSuggestions?: boolean
 }
 
 export function getMyProfile(): Promise<MyProfile> {

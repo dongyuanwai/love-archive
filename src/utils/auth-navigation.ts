@@ -1,6 +1,6 @@
 import { getAccessToken } from '@/api/token'
 
-export type LoginTarget = 'archive' | 'create' | 'insights' | 'profile' | 'binding'
+export type LoginTarget = 'archive' | 'create' | 'insights' | 'profile' | 'binding' | 'suggestion' | 'suggestionAdmin'
 
 const userStorageKey = 'love-archive:test-new-user'
 
@@ -9,6 +9,8 @@ const protectedRouteTargets: Record<string, LoginTarget> = {
   '/pages/insights/index': 'insights',
   '/pages/profile/index': 'profile',
   '/pages/binding/index': 'binding',
+  '/pages/suggestion/index': 'suggestion',
+  '/pages/suggestion/list': 'suggestionAdmin',
   '/pages/record/detail': 'archive',
 }
 

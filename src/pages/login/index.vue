@@ -20,7 +20,7 @@ const canLogin = computed(() => Boolean(avatarPath.value && nickname.value.trim(
 
 onLoad((query) => {
   const requestedTarget = String(query?.target || 'archive') as LoginTarget
-  if (['archive', 'create', 'insights', 'profile', 'binding'].includes(requestedTarget)) target.value = requestedTarget
+  if (['archive', 'create', 'insights', 'profile', 'binding', 'suggestion', 'suggestionAdmin'].includes(requestedTarget)) target.value = requestedTarget
 })
 
 const continueToTarget = () => {
@@ -28,7 +28,15 @@ const continueToTarget = () => {
     uni.redirectTo({ url: '/pages/binding/index' })
     return
   }
-  const tabPaths: Record<Exclude<LoginTarget, 'binding'>, string> = {
+  if (target.value === 'suggestion') {
+    uni.redirectTo({ url: '/pages/suggestion/index' })
+    return
+  }
+  if (target.value === 'suggestionAdmin') {
+    uni.redirectTo({ url: '/pages/suggestion/list' })
+    return
+  }
+  const tabPaths: Record<Exclude<LoginTarget, 'binding' | 'suggestion' | 'suggestionAdmin'>, string> = {
     archive: '/pages/index/index',
     create: '/pages/create/index',
     insights: '/pages/insights/index',

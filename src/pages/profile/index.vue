@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import AppIcon, { type AppIconName } from '@/components/AppIcon.vue'
+import AppIcon from '@/components/AppIcon.vue'
 import { useArchiveStore } from '@/stores/archive'
 import { getMyProfile, updateMyProfile } from '@/api/users'
 import { getCurrentRelationship } from '@/api/relationships'
@@ -18,6 +18,7 @@ const profileLoading = ref(store.user.isLoggedIn)
 const profileReady = ref(false)
 const logoutLoading = ref(false)
 const moodCount = ref(0)
+const canManageSuggestions = ref(false)
 
 onShow(async () => {
   syncTabBarSelection()
@@ -32,6 +33,7 @@ onShow(async () => {
       store.updateUserProfile(profile.nickname, profile.avatarUrl || '')
       store.setCurrentRelationship(relationship)
       moodCount.value = profile.moodCount || 0
+      canManageSuggestions.value = Boolean(profile.canManageSuggestions)
     } catch (error) {
       uni.showToast({ title: error instanceof Error ? error.message : '个人资料加载失败', icon: 'none' })
     } finally {
@@ -57,6 +59,8 @@ onShow(async () => {
 
 const openItem = (item: { path: string }) => uni.navigateTo({ url: item.path })
 const goBinding = () => uni.navigateTo({ url: '/pages/binding/index' })
+const goSuggestion = () => openItem({ path: '/pages/suggestion/index' })
+const goSuggestionManagement = () => openItem({ path: '/pages/suggestion/list' })
 
 const openNicknameEditor = () => {
   nicknameDraft.value = store.user.name
@@ -175,6 +179,24 @@ const logout = () => {
       </view>
     </template>
 
+    <view v-if="store.user.isLoggedIn" class="menu card">
+      <button class="menu-row" @tap="goSuggestion">
+        <view class="menu-icon"><AppIcon name="feedback" :size="22" /></view>
+        <view class="menu-copy">
+          <text class="menu-label">意见与建议</text>
+          <text class="menu-desc">你的想法，会让爱恋存档变得更好</text>
+        </view>
+        <AppIcon name="chevron" :size="18" color="#a69591" />
+      </button>
+      <button v-if="canManageSuggestions" class="menu-row menu-row--border" @tap="goSuggestionManagement">
+        <view class="menu-icon menu-icon--admin"><AppIcon name="document" :size="22" /></view>
+        <view class="menu-copy">
+          <text class="menu-label">反馈与建议管理</text>
+          <text class="menu-desc">仅你可查看用户提交的内容</text>
+        </view>
+        <AppIcon name="chevron" :size="18" color="#a69591" />
+      </button>
+    </view>
 
     <button v-if="store.user.isLoggedIn" class="logout" :loading="logoutLoading" :disabled="logoutLoading" @tap="logout">{{ logoutLoading ? '正在退出…' : '退出登录' }}</button>
     <text class="footer-note">爱恋存档 · 愿每一种心情，都被温柔看见</text>
@@ -214,5 +236,6 @@ const logout = () => {
 @keyframes skeleton-shimmer { to { background-position: -220% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton-block { animation: none; } }
 .menu{margin-top:24rpx;padding:0 24rpx}.menu-row{width:100%;min-height:120rpx;justify-content:flex-start;background:transparent;line-height:1.2;text-align:left}.menu-row--border{border-top:1rpx solid #f0e8e3}.menu-icon{display:flex;width:64rpx;height:64rpx;align-items:center;justify-content:center;border-radius:19rpx;background:#ffeadf;color:#95584e}.menu-copy{flex:1;margin-left:19rpx}.menu-label,.menu-desc{display:block}.menu-label{font-size:27rpx;font-weight:650}.menu-desc{margin-top:6rpx;color:#847672;font-size:21rpx}.logout{width:100%;margin-top:28rpx;min-height:92rpx;border:1rpx solid #f0e4dd;border-radius:24rpx;background:#fff;color:#a6554c;font-size:26rpx}.footer-note{display:block;margin-top:22rpx;color:#998a86;font-size:19rpx;letter-spacing:1rpx;text-align:center}
+.menu-icon--admin{background:#eaf1f6;color:#617b90}
 .editor-mask{position:fixed;z-index:100;inset:0;display:flex;padding:32rpx;align-items:center;justify-content:center;background:rgba(48,39,37,.4)}.nickname-editor{width:100%;padding:34rpx 30rpx 28rpx;border-radius:32rpx;background:#fffaf6;box-shadow:0 24rpx 60rpx rgba(66,47,42,.2)}.nickname-editor__title,.nickname-editor__desc{display:block}.nickname-editor__title{font-size:32rpx;font-weight:750}.nickname-editor__desc{margin-top:10rpx;color:#847672;font-size:22rpx;line-height:1.6}.nickname-editor__input{height:88rpx;margin-top:26rpx;padding:0 22rpx;border:1rpx solid #eadbd2;border-radius:22rpx;background:#fff;color:#4d403d;font-size:28rpx}.nickname-editor__actions{display:flex;gap:18rpx;margin-top:24rpx}.editor-button{display:flex;min-height:82rpx;flex:1;align-items:center;justify-content:center;border-radius:22rpx;font-size:26rpx;font-weight:700;line-height:1}.editor-button--cancel{background:#f3ebe6;color:#746663}.editor-button--save{background:#c96f61;color:#fff}.editor-button[disabled]{opacity:.6}
 </style>
