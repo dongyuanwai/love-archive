@@ -14,13 +14,6 @@ Component({
         selectedIconPath: '/static/icons/tabbar/archive-active.png',
       },
       {
-        pagePath: '/pages/create/index',
-        text: '记录',
-        target: 'create',
-        iconPath: '/static/icons/tabbar/create.png',
-        selectedIconPath: '/static/icons/tabbar/create-active.png',
-      },
-      {
         pagePath: '/pages/insights/index',
         text: '回顾',
         target: 'insights',

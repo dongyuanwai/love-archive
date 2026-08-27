@@ -9,7 +9,6 @@ interface PageWithTabBar {
 
 const tabRoutes = [
   'pages/index/index',
-  'pages/create/index',
   'pages/insights/index',
   'pages/profile/index',
 ]

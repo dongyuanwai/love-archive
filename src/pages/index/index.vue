@@ -222,7 +222,7 @@ const respondToMood = async (id: string) => {
   }
 }
 const goLogin = (target: 'create' | 'binding' | 'profile') => uni.navigateTo({ url: `/pages/login/index?target=${target}` })
-const goCreate = () => store.user.isLoggedIn ? uni.switchTab({ url: '/pages/create/index' }) : goLogin('create')
+const goCreate = () => store.user.isLoggedIn ? uni.navigateTo({ url: '/pages/create/index' }) : goLogin('create')
 const goBinding = () => store.user.isLoggedIn ? uni.navigateTo({ url: '/pages/binding/index' }) : goLogin('binding')
 const copyInviteCode = () => {
   if (!store.inviteCode) return

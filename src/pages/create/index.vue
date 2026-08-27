@@ -7,7 +7,6 @@ import { useArchiveStore } from '@/stores/archive'
 import type { MoodKind, Visibility } from '@/types/domain'
 import { todayString } from '@/utils/date'
 import { createMood } from '@/api/moods'
-import { syncTabBarSelection } from '@/utils/tab-bar'
 
 const store = useArchiveStore()
 const mood = ref<MoodKind>('happy')
@@ -29,7 +28,6 @@ const characterCount = computed(() => content.value.length)
 const canPublish = computed(() => content.value.trim().length > 0 && characterCount.value <= 1000 && !publishing.value)
 
 onShow(() => {
-  syncTabBarSelection()
   if (!store.user.isLoggedIn) {
     if (loginPrompted.value) {
       loginPrompted.value = false

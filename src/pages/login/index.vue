@@ -24,6 +24,10 @@ onLoad((query) => {
 })
 
 const continueToTarget = () => {
+  if (target.value === 'create') {
+    uni.redirectTo({ url: '/pages/create/index' })
+    return
+  }
   if (target.value === 'binding') {
     uni.redirectTo({ url: '/pages/binding/index' })
     return
@@ -36,9 +40,8 @@ const continueToTarget = () => {
     uni.redirectTo({ url: '/pages/suggestion/list' })
     return
   }
-  const tabPaths: Record<Exclude<LoginTarget, 'binding' | 'suggestion' | 'suggestionAdmin'>, string> = {
+  const tabPaths: Record<Exclude<LoginTarget, 'create' | 'binding' | 'suggestion' | 'suggestionAdmin'>, string> = {
     archive: '/pages/index/index',
-    create: '/pages/create/index',
     insights: '/pages/insights/index',
     profile: '/pages/profile/index',
   }

@@ -45,7 +45,6 @@
     "borderStyle": "white",
     "list": [
       { "pagePath": "pages/index/index", "text": "首页", "iconPath": "static/icons/tabbar/archive.png", "selectedIconPath": "static/icons/tabbar/archive-active.png" },
-      { "pagePath": "pages/create/index", "text": "记录", "iconPath": "static/icons/tabbar/create.png", "selectedIconPath": "static/icons/tabbar/create-active.png" },
       { "pagePath": "pages/insights/index", "text": "回顾", "iconPath": "static/icons/tabbar/insights.png", "selectedIconPath": "static/icons/tabbar/insights-active.png" },
       { "pagePath": "pages/profile/index", "text": "我的", "iconPath": "static/icons/tabbar/profile.png", "selectedIconPath": "static/icons/tabbar/profile-active.png" }
     ]
