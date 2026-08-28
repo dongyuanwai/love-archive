@@ -1,6 +1,9 @@
 export type MoodKind = 'happy' | 'sad'
 export type Visibility = 'partner' | 'private'
 export type AuthorId = 'me' | 'partner'
+export type AnniversaryKind = 'relationship' | 'birthday' | 'first_met' | 'custom'
+export type AnniversaryRepeat = 'yearly' | 'once'
+export type CalendarType = 'solar' | 'lunar'
 
 export interface UserProfile {
   id?: string
@@ -49,4 +52,28 @@ export interface Relationship {
   daysTogether?: number
   sharedMoodCount?: number
   responseCount?: number
+}
+
+export interface Anniversary {
+  id: string
+  title: string
+  date: string
+  kind: AnniversaryKind
+  calendarType: CalendarType
+  repeat: AnniversaryRepeat
+  visibility: Visibility
+  note: string
+  lunarYear?: number
+  lunarMonth?: number
+  lunarDay?: number
+  isLeapMonth?: boolean
+  reminderDaysBefore: number[]
+  creatorId?: string
+  relationshipId?: string
+  nextOccurrenceDate?: string
+  daysUntil?: number
+  status?: string
+  archived?: boolean
+  createdAt: string
+  updatedAt: string
 }

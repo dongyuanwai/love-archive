@@ -5,15 +5,18 @@ import AppIcon from '@/components/AppIcon.vue'
 import LoadingIndicator from '@/components/LoadingIndicator.vue'
 import RecordCard from '@/components/RecordCard.vue'
 import SegmentControl from '@/components/SegmentControl.vue'
+import { useAnniversaryStore } from '@/stores/anniversary'
 import { useArchiveStore } from '@/stores/archive'
 import type { AuthorId, MoodRecord } from '@/types/domain'
-import { getTodayMoodStatus, listMoods, type MoodListScope, type TodayMoodStatus } from '@/api/moods'
+import { listMoods, type MoodListScope } from '@/api/moods'
 import { acceptRelationshipInvite, createRelationshipInvite, getCurrentRelationship } from '@/api/relationships'
 import { addReaction, removeReaction } from '@/api/reactions'
 import { getMoodDetail } from '@/api/moods'
 import { syncTabBarSelection } from '@/utils/tab-bar'
+import { anniversaryKindLabels, formatAnniversaryDate, getAnniversaryStatus } from '@/utils/anniversary'
 
 const store = useArchiveStore()
+const anniversaryStore = useAnniversaryStore()
 type ArchiveFilter = 'all' | 'me' | 'partner'
 interface FeedState {
   items: MoodRecord[]
@@ -46,10 +49,6 @@ const feeds = reactive<Record<ArchiveFilter, FeedState>>({
   partner: createFeedState(),
 })
 const pageSize = 10
-const todayStatus = ref<TodayMoodStatus | null>(null)
-const contextLoading = ref(store.user.isLoggedIn)
-const contextShowLoading = ref(store.user.isLoggedIn)
-const contextReady = ref(false)
 const respondingId = ref('')
 const inviteLoading = ref(false)
 const inviteError = ref('')
@@ -98,7 +97,6 @@ const loadRecords = async (scope: ArchiveFilter = filter.value, showLoading = tr
     resetFeeds()
     store.replaceRecords([])
     store.setCurrentRelationship({ active: false, relationship: null })
-    todayStatus.value = null
     return
   }
   const feed = feeds[scope]
@@ -126,35 +124,19 @@ const loadRecords = async (scope: ArchiveFilter = filter.value, showLoading = tr
   }
 }
 
-const loadPageContext = async (showLoading = true) => {
+const loadPageContext = async () => {
   const requestId = ++contextRequestId
   if (!store.user.isLoggedIn) {
-    contextLoading.value = false
-    contextShowLoading.value = false
-    contextReady.value = true
-    todayStatus.value = null
     store.setCurrentRelationship({ active: false, relationship: null })
     return
   }
-  contextLoading.value = true
-  contextShowLoading.value = showLoading
   try {
-    const [statusResult, relationshipResult] = await Promise.all([
-      getTodayMoodStatus(),
-      getCurrentRelationship(),
-    ])
+    const relationshipResult = await getCurrentRelationship()
     if (requestId !== contextRequestId || !store.user.isLoggedIn) return
-    todayStatus.value = statusResult
     store.setCurrentRelationship(relationshipResult)
     if (filter.value === 'partner' && !relationshipResult.active) void ensureInviteCode()
   } catch (error) {
     console.warn('首页状态加载失败', error)
-  } finally {
-    if (requestId === contextRequestId) {
-      contextLoading.value = false
-      contextShowLoading.value = false
-      contextReady.value = true
-    }
   }
 }
 
@@ -183,11 +165,13 @@ const loadMoreRecords = async () => {
 
 onShow(() => {
   syncTabBarSelection()
+  if (store.user.isLoggedIn) void anniversaryStore.loadNearest(store.user.id, true)
+  else anniversaryStore.reset()
   filterKeys.forEach((key) => {
     if (key !== filter.value) feeds[key].loaded = false
   })
   void loadRecords(filter.value, !activeFeed.value.loaded)
-  void loadPageContext(!contextReady.value)
+  void loadPageContext()
 })
 onReachBottom(loadMoreRecords)
 
@@ -195,8 +179,10 @@ const filters = [
   { label: '全部', value: 'all' }, { label: '我的', value: 'me' }, { label: 'TA 的', value: 'partner' },
 ]
 const isUnboundPartnerView = computed(() => store.user.isLoggedIn && filter.value === 'partner' && !store.activeRelationship)
-const myTodayMoodId = computed(() => todayStatus.value?.mine?.id || null)
-const partnerTodayMoodId = computed(() => todayStatus.value?.partner.id || null)
+const nearestAnniversary = computed(() => store.user.isLoggedIn ? anniversaryStore.nearestItem : null)
+const retryNearestAnniversary = () => {
+  if (store.user.isLoggedIn) void anniversaryStore.loadNearest(store.user.id, true)
+}
 
 const openRecord = (id: string) => uni.navigateTo({ url: `/pages/record/detail?id=${id}` })
 const respondToMood = async (id: string) => {
@@ -223,6 +209,12 @@ const respondToMood = async (id: string) => {
 }
 const goLogin = (target: 'create' | 'binding' | 'profile') => uni.navigateTo({ url: `/pages/login/index?target=${target}` })
 const goCreate = () => store.user.isLoggedIn ? uni.navigateTo({ url: '/pages/create/index' }) : goLogin('create')
+const goAnniversary = () => store.user.isLoggedIn
+  ? uni.switchTab({ url: '/pages/anniversary/index' })
+  : uni.navigateTo({ url: '/pages/login/index?target=anniversary' })
+const goAddAnniversary = () => store.user.isLoggedIn
+  ? uni.navigateTo({ url: '/pages/anniversary/edit' })
+  : uni.navigateTo({ url: '/pages/login/index?target=anniversaryEdit' })
 const goBinding = () => store.user.isLoggedIn ? uni.navigateTo({ url: '/pages/binding/index' }) : goLogin('binding')
 const copyInviteCode = () => {
   if (!store.inviteCode) return
@@ -264,12 +256,6 @@ const acceptInvite = () => {
     },
   })
 }
-const openTodayMood = (recordId: string | null, authorId: AuthorId) => {
-  if (recordId) return openRecord(recordId)
-  if (authorId === 'me') return goCreate()
-  if (!store.activeRelationship) filter.value = 'partner'
-}
-
 watch(filter, (value) => {
   if (value === 'partner' && !store.activeRelationship) void ensureInviteCode()
   if (!feeds[value].loaded && value !== 'all' && feeds.all.loaded) {
@@ -300,90 +286,103 @@ watch(filter, (value) => {
       </view>
     </view>
 
-    <view v-if="contextLoading && !contextReady" class="bond-card card home-skeleton" aria-label="正在加载关系状态">
-      <view class="bond-card__icon skeleton-block" />
-      <view class="bond-card__copy">
-        <view class="skeleton-block skeleton-line skeleton-bond-title" />
-        <view class="skeleton-block skeleton-line skeleton-bond-desc" />
+    <view class="special-days-heading">
+      <view class="special-days-heading__main">
+        <text class="section-title">重要日子</text>
+        <view
+          class="special-days-heading__add"
+          role="button"
+          aria-label="添加重要日子"
+          hover-class="heading-action--pressed"
+          :hover-start-time="20"
+          @tap="goAddAnniversary"
+        >
+          <view class="special-days-heading__add-icon"><AppIcon name="plus" :size="13" /></view>
+          <text class="special-days-heading__add-text">添加</text>
+        </view>
       </view>
-      <view class="skeleton-block skeleton-chevron" />
-    </view>
-    <view v-else-if="store.activeRelationship" class="bond-card card" :class="{ 'data-card--refreshing': contextShowLoading }" @tap="goBinding">
-      <view class="bond-card__icon"><text class="bond-heart">♥</text></view>
-      <view class="bond-card__copy">
-        <text class="bond-card__title">正在和 {{ store.activeRelationship.partnerName }} 共同存档</text>
-        <text class="bond-card__desc">已彼此陪伴 {{ store.activeRelationship.daysTogether || 1 }} 天</text>
+      <view class="special-days-heading__meta">
+        <text class="special-days-heading__sub">纪念日、生日，还有值得记录的相遇</text>
+        <view
+          class="special-days-heading__more"
+          role="button"
+          aria-label="查看全部重要日子"
+          hover-class="heading-action--pressed"
+          :hover-start-time="20"
+          @tap="goAnniversary"
+        >
+          <text>查看全部</text>
+          <AppIcon name="chevron" :size="14" />
+        </view>
       </view>
-      <AppIcon name="chevron" :size="17" color="#a89691" />
-    </view>
-    <view v-else class="bond-card card" :class="{ 'data-card--refreshing': contextShowLoading }" @tap="goBinding">
-      <view class="bond-card__icon"><text class="bond-heart">♥</text></view>
-      <view class="bond-card__copy"><text class="bond-card__title">邀请你的对象共同存档</text><text class="bond-card__desc">未绑定时也可以安心独自记录</text></view>
-      <AppIcon name="chevron" :size="17" color="#a89691" />
     </view>
 
-    <view class="inbox-heading">
-      <view>
-        <text class="section-title">今日心情信箱</text>
-        <text class="inbox-heading__sub">不比较情绪，只认真听见彼此</text>
+    <view v-if="nearestAnniversary" class="special-day-card card" @tap="goAnniversary">
+      <view class="special-day-card__top">
+        <view class="special-day-card__kind">
+          <AppIcon :name="nearestAnniversary.kind === 'relationship' ? 'heart' : 'calendar'" :size="15" :filled="nearestAnniversary.kind === 'relationship'" />
+          <text>{{ anniversaryKindLabels[nearestAnniversary.kind] }}</text>
+        </view>
+        <view class="special-day-card__visibility">
+          <AppIcon :name="nearestAnniversary.visibility === 'private' ? 'lock' : 'heart'" :size="13" />
+          <text>{{ nearestAnniversary.visibility === 'private' ? '仅自己可见' : '双方可见' }}</text>
+        </view>
       </view>
-      <text class="inbox-heading__date">今天</text>
+      <text class="special-day-card__title">{{ nearestAnniversary.title }}</text>
+      <text v-if="nearestAnniversary.note" class="special-day-card__note">{{ nearestAnniversary.note }}</text>
+      <view class="special-day-card__bottom">
+        <view class="special-day-card__date">
+          <text class="special-day-card__label">日期</text>
+          <view class="special-day-card__date-value">
+            <view class="special-day-card__date-icon"><AppIcon name="calendar" :size="15" /></view>
+            <text class="special-day-card__date-text">{{ formatAnniversaryDate(nearestAnniversary) }}</text>
+          </view>
+        </view>
+        <view class="special-day-card__countdown">
+          <text class="special-day-card__label">距离下一次</text>
+          <text class="special-day-card__countdown-value">{{ getAnniversaryStatus(nearestAnniversary) }}</text>
+        </view>
+      </view>
     </view>
-    <view v-if="contextLoading && !contextReady" class="mood-inbox card home-skeleton" aria-label="正在加载今日心情">
-      <view v-for="item in 2" :key="item" class="inbox-row">
-        <view class="inbox-avatar skeleton-block" />
-        <view class="inbox-copy">
-          <view class="skeleton-block skeleton-line skeleton-inbox-title" />
-          <view class="skeleton-block skeleton-line skeleton-inbox-desc" />
-        </view>
-        <view class="skeleton-block skeleton-inbox-action" />
+    <view v-else-if="store.user.isLoggedIn && anniversaryStore.nearestLoading && !anniversaryStore.nearestLoaded" class="special-day-card special-day-skeleton card" aria-label="正在加载最近的重要日子">
+      <view class="special-day-skeleton__top skeleton-shimmer" />
+      <view class="special-day-skeleton__title skeleton-shimmer" />
+      <view class="special-day-skeleton__bottom">
+        <view class="special-day-skeleton__line skeleton-shimmer" />
+        <view class="special-day-skeleton__line special-day-skeleton__line--short skeleton-shimmer" />
       </view>
     </view>
-    <view v-else class="mood-inbox card" :class="{ 'data-card--refreshing': contextShowLoading }">
-      <view class="inbox-row" @tap="openTodayMood(myTodayMoodId, 'me')">
-        <view class="inbox-avatar">
-          <image v-if="store.user.avatarUrl" class="user-avatar-image" :src="store.user.avatarUrl" mode="aspectFill" />
-          <text v-else>{{ store.user.initial }}</text>
-        </view>
-        <view class="inbox-copy">
-          <text class="inbox-title">{{ myTodayMoodId ? '今天的心情已好好存档' : '今天还没有留下心情' }}</text>
-          <text class="inbox-desc">{{ myTodayMoodId ? '这一刻已经被你温柔保存' : '不需要写得完美，诚实记录就好' }}</text>
-        </view>
-        <view class="inbox-action">
-          <text>{{ myTodayMoodId ? '查看' : '去记录' }}</text>
-          <view class="inbox-action__icon"><AppIcon name="chevron" :size="15" color="#a36b61" /></view>
-        </view>
+    <view v-else-if="store.user.isLoggedIn && anniversaryStore.nearestError" class="special-day-empty card">
+      <view class="special-day-empty__icon"><AppIcon name="calendar" :size="27" /></view>
+      <view class="special-day-empty__copy">
+        <text class="special-day-empty__title">重要日子暂时没有加载出来</text>
+        <text class="special-day-empty__desc">{{ anniversaryStore.nearestError }}</text>
       </view>
-
-      <view
-        class="inbox-row inbox-row--partner"
-        @tap="openTodayMood(partnerTodayMoodId, 'partner')"
-      >
-        <view class="inbox-avatar inbox-avatar--partner">
-          <image v-if="store.activeRelationship?.partnerAvatarUrl" class="user-avatar-image" :src="store.activeRelationship.partnerAvatarUrl" mode="aspectFill" />
-          <text v-else>{{ store.activeRelationship?.partnerInitial || '?' }}</text>
-        </view>
-        <view class="inbox-copy">
-          <text class="inbox-title">
-            {{ partnerTodayMoodId ? `${store.activeRelationship?.partnerName || 'TA'} 留下了一封心情` : store.activeRelationship ? '今天的信箱还很安静' : '邀请 TA 一起写下心情' }}
-          </text>
-          <text class="inbox-desc">
-            {{ partnerTodayMoodId ? '慢一点读，也许 TA 正在等你理解' : store.activeRelationship ? '给彼此一点时间，也是一种温柔' : '绑定后，彼此可见的心情会来到这里' }}
-          </text>
-        </view>
-        <view v-if="partnerTodayMoodId || !store.activeRelationship" class="inbox-action inbox-action--partner">
-          <text>{{ partnerTodayMoodId ? '去看看' : '去邀请' }}</text>
-          <view class="inbox-action__icon"><AppIcon name="chevron" :size="15" color="#607f98" /></view>
-        </view>
+      <view class="special-day-retry" role="button" hover-class="heading-action--pressed" @tap="retryNearestAnniversary">重试</view>
+    </view>
+    <view v-else class="special-day-empty card">
+      <view class="special-day-empty__icon"><AppIcon name="calendar" :size="27" /></view>
+      <view class="special-day-empty__copy">
+        <text class="special-day-empty__title">收藏第一个重要日子</text>
+        <text class="special-day-empty__desc">{{ store.user.isLoggedIn ? '点击右上角“添加”，从纪念日或生日开始' : '登录后记录纪念日、生日与特别相遇' }}</text>
       </view>
     </view>
 
     <view class="feed-heading">
       <text class="section-title">心情存档</text>
-      <button class="quick-add" @tap="goCreate">
-        <view class="quick-add__icon"><AppIcon name="plus" :size="17" /></view>
-        <text class="quick-add__text">记录</text>
-      </button>
+      <view
+        class="quick-add"
+        role="button"
+        aria-label="记录心情"
+        hover-class="heading-action--pressed"
+        :hover-start-time="20"
+        @tap="goCreate"
+      >
+        <view class="quick-add__content">
+          <view class="quick-add__icon"><AppIcon name="plus" :size="17" /></view>
+          <text class="quick-add__text">记录</text>
+        </view>
+      </view>
     </view>
     <SegmentControl v-model="filter" :options="filters" />
 
@@ -459,42 +458,61 @@ watch(filter, (value) => {
 .paired-avatar--me { background: #f7c29f; }
 .paired-avatar--partner { margin-left: -22rpx; background: #c7dae9; color: #526a80; }
 .user-avatar-image { display: block; width: 100%; height: 100%; border-radius: inherit; }
-.bond-card { display: flex; min-height: 124rpx; padding: 25rpx 24rpx; align-items: center; border-color: #efdcd2; background: linear-gradient(135deg,#fff,#fff8f3); }
-.bond-card__icon { display: flex; width: 70rpx; height: 70rpx; align-items: center; justify-content: center; border: 1rpx solid #f1d8ca; border-radius: 22rpx; background: #ffeadc; color: #96594e; }
-.bond-heart { color: #a65147; font-size: 31rpx; line-height: 1; }
-.bond-card__copy { flex: 1; margin-left: 18rpx; }
-.bond-card__title, .bond-card__desc { display: block; }
-.bond-card__title { color: #4a3c39; font-size: 27rpx; font-weight: 700; }
-.bond-card__desc { margin-top: 7rpx; color: #837572; font-size: 22rpx; }
-.inbox-heading { display: flex; margin-top: 42rpx; align-items: flex-end; justify-content: space-between; }
-.inbox-heading .section-title { margin: 0; }
-.inbox-heading__sub { display: block; margin-top: 6rpx; color: #887a76; font-size: 22rpx; }
-.inbox-heading__date { padding: 8rpx 16rpx; border-radius: 999rpx; background: #f6e8df; color: #9c5d52; font-size: 21rpx; }
-.mood-inbox { overflow: hidden; margin-top: 20rpx; padding: 0 24rpx; }
-.inbox-row { display: flex; min-height: 148rpx; align-items: center; border-bottom: 1rpx solid #f0e6e0; }
-.inbox-row:last-child { border-bottom: 0; }
-.inbox-avatar { display: flex; width: 66rpx; height: 66rpx; flex: none; align-items: center; justify-content: center; border-radius: 21rpx; background: #f7c29f; color: #70473e; font-weight: 700; }
-.inbox-avatar--partner { background: #c7dae9; color: #526a80; }
-.inbox-copy { min-width: 0; flex: 1; margin-left: 18rpx; }
-.inbox-title, .inbox-desc { display: block; }
-.inbox-title { overflow: hidden; color: #4e403d; font-size: 25rpx; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.inbox-desc { overflow: hidden; margin-top: 8rpx; color: #82736f; font-size: 21rpx; text-overflow: ellipsis; white-space: nowrap; }
-.inbox-action { display: flex; width: 124rpx; height: 66rpx; gap: 4rpx; flex: none; margin-left: 12rpx; padding: 0 8rpx; box-sizing: border-box; align-items: center; justify-content: center; border-radius: 19rpx; background: #fff1e8; color: #9f5f54; font-size: 21rpx; font-weight: 650; text-align: center; }
-.inbox-action>text { display: flex; height: 100%; flex: none; align-items: center; justify-content: center; line-height: 1; text-align: center; }
-.inbox-action__icon { display: flex; width: 30rpx; height: 30rpx; flex: none; align-items: center; justify-content: center; line-height: 1; }
-.inbox-action--partner { background: #edf4f9; color: #607f98; }
+.special-days-heading { margin-top: 4rpx; }
+.special-days-heading__main,.special-days-heading__meta { display: flex; align-items: center; }
+.special-days-heading__main { gap: 14rpx; justify-content: flex-start; }
+.special-days-heading__meta { justify-content: space-between; }
+.special-days-heading .section-title { display: block; margin: 0; }
+.special-days-heading__meta { min-height: 48rpx; margin-top: 3rpx; }
+.special-days-heading__sub { color: #887a76; font-size: 22rpx; }
+.special-days-heading__add { display: flex; min-width: 108rpx; height: 60rpx; gap: 4rpx; padding: 0 16rpx; align-items: center; justify-content: center; border: 1rpx solid #eacbc4; border-radius: 20rpx; background: #fff7f3; color: #a65349; font-size: 21rpx; font-weight: 700; line-height: 1; }
+.special-days-heading__add-icon { display: flex; width: 28rpx; height: 28rpx; flex: none; align-items: center; justify-content: center; font-size: 0; line-height: 0; }
+.special-days-heading__add-text { display: block; height: 28rpx; line-height: 28rpx; }
+.special-days-heading__more { display: flex; height: 48rpx; gap: 1rpx; padding: 0 0 0 12rpx; align-items: center; justify-content: center; background: transparent; color: #9c6a62; font-size: 20rpx; font-weight: 650; line-height: 1; }
+.heading-action--pressed { opacity: .62; }
+.special-day-card { position: relative; overflow: hidden; margin-top: 17rpx; padding: 27rpx 27rpx 25rpx; border-color: #edd3cc; background: linear-gradient(145deg,#fffdfa 0%,#fff2ed 100%); box-shadow: 0 12rpx 34rpx rgba(132,79,67,.09); }
+.special-day-card::after { position: absolute; width: 178rpx; height: 178rpx; right: -66rpx; bottom: -92rpx; border-radius: 50%; background: rgba(244,178,158,.12); content: ''; pointer-events: none; }
+.special-day-card__top { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; }
+.special-day-card__kind { display: flex; min-height: 48rpx; gap: 7rpx; padding: 0 15rpx; align-items: center; justify-content: center; border-radius: 999rpx; background: #ffe6de; color: #9f5148; font-size: 20rpx; font-weight: 700; }
+.special-day-card__visibility { display: flex; gap: 6rpx; align-items: center; color: #8f7d78; font-size: 19rpx; }
+.special-day-card__title,.special-day-card__note,.special-day-card__label,.special-day-card__countdown-value { display: block; }
+.special-day-card__title { position: relative; z-index: 1; margin-top: 24rpx; color: #453734; font-size: 36rpx; font-weight: 760; line-height: 1.4; }
+.special-day-card__note { position: relative; z-index: 1; overflow: hidden; margin-top: 8rpx; color: #7b6b67; font-size: 22rpx; text-overflow: ellipsis; white-space: nowrap; }
+.special-day-card__bottom { position: relative; z-index: 1; display: flex; margin-top: 25rpx; padding-top: 21rpx; align-items: flex-end; justify-content: space-between; border-top: 1rpx solid #eedbd5; }
+.special-day-card__label { margin-bottom: 7rpx; color: #a3928d; font-size: 18rpx; }
+.special-day-card__date { min-width: 0; flex: 1; }
+.special-day-card__date-value { display: flex; height: 32rpx; gap: 7rpx; align-items: center; color: #735a54; font-size: 22rpx; font-weight: 650; line-height: 1; }
+.special-day-card__date-icon { display: flex; width: 30rpx; height: 30rpx; flex: none; align-items: center; justify-content: center; font-size: 0; line-height: 1; }
+.special-day-card__date-text { display: flex; height: 30rpx; align-items: center; line-height: 30rpx; white-space: nowrap; }
+.special-day-card__countdown { flex: none; margin-left: 20rpx; text-align: right; }
+.special-day-card__countdown-value { color: #ad5148; font-size: 29rpx; font-weight: 780; line-height: 1.15; }
+.special-day-empty { display: flex; min-height: 136rpx; margin-top: 20rpx; padding: 24rpx; align-items: center; border-color: #efd8d1; background: linear-gradient(145deg,#fff,#fff6f2); }
+.special-day-empty__icon { display: flex; width: 74rpx; height: 74rpx; flex: none; align-items: center; justify-content: center; border-radius: 24rpx; background: #ffe5dc; color: #a85b50; }
+.special-day-empty__copy { min-width: 0; flex: 1; margin-left: 17rpx; }
+.special-day-empty__title,.special-day-empty__desc { display: block; }
+.special-day-empty__title { color: #4d3e3b; font-size: 26rpx; font-weight: 750; }
+.special-day-empty__desc { margin-top: 7rpx; color: #897975; font-size: 20rpx; line-height: 1.5; }
+.special-day-retry { display: flex; width: 92rpx; height: 58rpx; flex: none; align-items: center; justify-content: center; border-radius: 19rpx; background: #fff0ea; color: #a65349; font-size: 21rpx; font-weight: 700; }
+.special-day-skeleton { min-height: 258rpx; pointer-events: none; }
+.special-day-skeleton__top { width: 138rpx; height: 48rpx; border-radius: 999rpx; }
+.special-day-skeleton__title { width: 58%; height: 39rpx; margin-top: 25rpx; border-radius: 14rpx; }
+.special-day-skeleton__bottom { display: flex; margin-top: 31rpx; padding-top: 25rpx; align-items: center; justify-content: space-between; border-top: 1rpx solid #eedbd5; }
+.special-day-skeleton__line { width: 38%; height: 26rpx; border-radius: 12rpx; }
+.special-day-skeleton__line--short { width: 24%; }
+.skeleton-shimmer { background: linear-gradient(100deg, #f3e4df 25%, #fff8f4 45%, #f3e4df 65%); background-size: 220% 100%; animation: skeleton-shimmer 1.35s ease-in-out infinite; }
+@keyframes skeleton-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .feed-heading { display: flex; margin-top: 42rpx; align-items: center; justify-content: space-between; }
 .feed-heading .section-title { margin: 0; }
-.quick-add { display: flex; height: 60rpx; gap: 6rpx; margin: 0; padding: 0 8rpx; box-sizing: border-box; align-items: center; justify-content: center; border: 0; background: transparent; color: #a84f45; font-size: 25rpx; font-weight: 700; line-height: 1; }
-.quick-add::after { border: 0; }
-.quick-add__icon { display: flex; width: 34rpx; height: 34rpx; flex: none; align-items: center; justify-content: center; line-height: 1; }
-.quick-add__text { display: flex; height: 34rpx; align-items: center; justify-content: center; line-height: 1; }
+.quick-add { display: flex; height: 60rpx; margin: 0; padding: 0 8rpx; box-sizing: border-box; align-items: center; justify-content: center; border: 0; background: transparent; color: #a84f45; font-size: 25rpx; font-weight: 700; line-height: normal; }
+.quick-add__content { display: flex; height: 36rpx; gap: 6rpx; align-items: center; justify-content: center; }
+.quick-add__icon { display: flex; width: 36rpx; height: 36rpx; flex: none; align-items: center; justify-content: center; font-size: 0; line-height: 0; }
+.quick-add__text { display: block; height: 36rpx; line-height: 36rpx; }
 .feed-heading + :deep(.segments) { margin-top: 20rpx; }
 .feed { display: grid; gap: 24rpx; margin-top: 24rpx; }
 .feed-footer { display: flex; min-height: 72rpx; align-items: center; justify-content: center; color: #948681; font-size: 21rpx; text-align: center; }
 .feed-footer button { min-height: 64rpx; padding: 0 24rpx; background: transparent; color: #a45e53; font-size: 21rpx; line-height: 64rpx; }
 .empty-state { margin-top: 22rpx; }
 .retry-button, .empty-create { display: flex; min-height: 72rpx; margin: 22rpx auto 0; padding: 0 28rpx; align-items: center; justify-content: center; border-radius: 20rpx; background: #d87263; color: #fff; font-size: 23rpx; font-weight: 700; line-height: 1; }
-.home-skeleton{pointer-events:none}.skeleton-block{overflow:hidden;border:0;background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}.skeleton-line{border-radius:999rpx}.home-skeleton .bond-card__icon{background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%}.skeleton-bond-title{width:260rpx;height:27rpx}.skeleton-bond-desc{width:182rpx;height:22rpx;margin-top:7rpx}.skeleton-chevron{width:17rpx;height:29rpx;flex:none;border-radius:999rpx}.home-skeleton .inbox-avatar{background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%}.skeleton-inbox-title{width:250rpx;height:25rpx}.skeleton-inbox-desc{width:310rpx;height:21rpx;margin-top:8rpx}.skeleton-inbox-action{width:124rpx;height:66rpx;flex:none;margin-left:12rpx;border-radius:19rpx}.record-skeleton{min-height:300rpx;padding:28rpx 26rpx 24rpx}.record-skeleton__head,.skeleton-record-author,.record-skeleton__footer{display:flex;align-items:center}.record-skeleton__head{justify-content:space-between}.skeleton-record-author{gap:18rpx}.skeleton-record-avatar{width:68rpx;height:68rpx;flex:none;border-radius:21rpx}.skeleton-record-name{width:116rpx;height:26rpx}.skeleton-record-time{width:142rpx;height:22rpx;margin-top:7rpx}.skeleton-record-chip{width:112rpx;height:48rpx;border-radius:999rpx}.skeleton-record-content{width:82%;height:26rpx;margin-top:14rpx}.skeleton-record-content--long{width:100%;margin-top:28rpx}.record-skeleton__footer{gap:16rpx;margin-top:25rpx;padding-top:19rpx;border-top:1rpx solid #f1e8e3}.skeleton-record-action{width:128rpx;height:50rpx;border-radius:16rpx}.skeleton-record-action--wide{flex:1}.data-card--refreshing,.feed--refreshing{position:relative;overflow:hidden;pointer-events:none}.data-card--refreshing::after,.feed--refreshing::after{position:absolute;z-index:5;inset:0;content:'';background:linear-gradient(100deg,rgba(255,250,248,.28) 20%,rgba(245,226,225,.68) 42%,rgba(255,250,248,.28) 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}.feed--refreshing::after{border-radius:26rpx}@keyframes skeleton-shimmer{to{background-position:-220% 0}}@media(prefers-reduced-motion:reduce){.skeleton-block,.data-card--refreshing::after,.feed--refreshing::after{animation:none}}
+.home-skeleton{pointer-events:none}.skeleton-block{overflow:hidden;border:0;background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}.skeleton-line{border-radius:999rpx}.record-skeleton{min-height:300rpx;padding:28rpx 26rpx 24rpx}.record-skeleton__head,.skeleton-record-author,.record-skeleton__footer{display:flex;align-items:center}.record-skeleton__head{justify-content:space-between}.skeleton-record-author{gap:18rpx}.skeleton-record-avatar{width:68rpx;height:68rpx;flex:none;border-radius:21rpx}.skeleton-record-name{width:116rpx;height:26rpx}.skeleton-record-time{width:142rpx;height:22rpx;margin-top:7rpx}.skeleton-record-chip{width:112rpx;height:48rpx;border-radius:999rpx}.skeleton-record-content{width:82%;height:26rpx;margin-top:14rpx}.skeleton-record-content--long{width:100%;margin-top:28rpx}.record-skeleton__footer{gap:16rpx;margin-top:25rpx;padding-top:19rpx;border-top:1rpx solid #f1e8e3}.skeleton-record-action{width:128rpx;height:50rpx;border-radius:16rpx}.skeleton-record-action--wide{flex:1}.feed--refreshing{position:relative;overflow:hidden;pointer-events:none}.feed--refreshing::after{position:absolute;z-index:5;inset:0;content:'';border-radius:26rpx;background:linear-gradient(100deg,rgba(255,250,248,.28) 20%,rgba(245,226,225,.68) 42%,rgba(255,250,248,.28) 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}@keyframes skeleton-shimmer{to{background-position:-220% 0}}@media(prefers-reduced-motion:reduce){.skeleton-block,.feed--refreshing::after{animation:none}}
 .partner-invite-empty { margin-top: 24rpx; padding: 38rpx 30rpx 30rpx; text-align: center; background: linear-gradient(145deg,#fff,#fff5ed); }.partner-invite-empty__icon{display:flex;width:82rpx;height:82rpx;margin:0 auto;align-items:center;justify-content:center;border-radius:28rpx;background:#eaf2f8;color:#607f98}.partner-invite-empty__title,.partner-invite-empty__desc{display:block}.partner-invite-empty__title{margin-top:22rpx;font-size:30rpx;font-weight:750}.partner-invite-empty__desc{margin:12rpx auto 0;color:#81736f;font-size:22rpx;line-height:1.65}.binding-mode{display:flex;margin-top:26rpx;padding:6rpx;border-radius:20rpx;background:#efe5df}.binding-mode button{display:flex;height:64rpx;flex:1;align-items:center;justify-content:center;border-radius:16rpx;background:transparent;color:#897a76;font-size:23rpx;line-height:1}.binding-mode button.active{background:#fff;color:#9c564d;font-weight:700;box-shadow:0 5rpx 15rpx rgba(90,65,55,.08)}.invite-code-box,.invite-enter-box{margin-top:20rpx;padding:23rpx;border:1rpx dashed #dfc8bb;border-radius:24rpx;background:#fffaf6}.invite-code-box__label,.invite-code-box__value,.invite-code-box__status,.invite-code-box__tip{display:block}.invite-code-box__label{color:#8b7c77;font-size:20rpx}.invite-code-box__value{margin-top:10rpx;color:#77483f;font-size:38rpx;font-weight:800;letter-spacing:5rpx}.invite-code-box__status{margin-top:12rpx;color:#897a76;font-size:23rpx}.invite-code-box__tip{margin-top:10rpx;color:#9d8e8a;font-size:19rpx}.invite-code-input{height:88rpx;margin-top:16rpx;border:1rpx solid #e8d9d1;border-radius:21rpx;background:#fff;color:#674842;font-size:29rpx;font-weight:750;letter-spacing:3rpx;text-align:center}.invite-copy{display:flex;min-height:80rpx;margin-top:22rpx;align-items:center;justify-content:center;border-radius:22rpx;background:#d87263;color:#fff;font-size:25rpx;font-weight:700;line-height:1}.invite-secondary{min-height:62rpx;margin:10rpx auto 0;background:transparent;color:#8f6058;font-size:22rpx;line-height:62rpx}.invite-copy[disabled],.invite-secondary[disabled]{opacity:.58}
 </style>

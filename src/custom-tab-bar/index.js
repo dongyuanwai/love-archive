@@ -14,6 +14,13 @@ Component({
         selectedIconPath: '/static/icons/tabbar/archive-active.png',
       },
       {
+        pagePath: '/pages/anniversary/index',
+        text: '纪念日',
+        target: 'anniversary',
+        iconPath: '/static/icons/tabbar/create.png',
+        selectedIconPath: '/static/icons/tabbar/create-active.png',
+      },
+      {
         pagePath: '/pages/insights/index',
         text: '回顾',
         target: 'insights',

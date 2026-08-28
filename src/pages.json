@@ -9,6 +9,14 @@
       "style": { "navigationBarTitleText": "记录此刻" }
     },
     {
+      "path": "pages/anniversary/index",
+      "style": { "navigationBarTitleText": "重要日子" }
+    },
+    {
+      "path": "pages/anniversary/edit",
+      "style": { "navigationBarTitleText": "编辑重要日子" }
+    },
+    {
       "path": "pages/insights/index",
       "style": { "navigationBarTitleText": "情绪回顾" }
     },
@@ -45,6 +53,7 @@
     "borderStyle": "white",
     "list": [
       { "pagePath": "pages/index/index", "text": "首页", "iconPath": "static/icons/tabbar/archive.png", "selectedIconPath": "static/icons/tabbar/archive-active.png" },
+      { "pagePath": "pages/anniversary/index", "text": "纪念日", "iconPath": "static/icons/tabbar/create.png", "selectedIconPath": "static/icons/tabbar/create-active.png" },
       { "pagePath": "pages/insights/index", "text": "回顾", "iconPath": "static/icons/tabbar/insights.png", "selectedIconPath": "static/icons/tabbar/insights-active.png" },
       { "pagePath": "pages/profile/index", "text": "我的", "iconPath": "static/icons/tabbar/profile.png", "selectedIconPath": "static/icons/tabbar/profile-active.png" }
     ]

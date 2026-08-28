@@ -20,12 +20,16 @@ const canLogin = computed(() => Boolean(avatarPath.value && nickname.value.trim(
 
 onLoad((query) => {
   const requestedTarget = String(query?.target || 'archive') as LoginTarget
-  if (['archive', 'create', 'insights', 'profile', 'binding', 'suggestion', 'suggestionAdmin'].includes(requestedTarget)) target.value = requestedTarget
+  if (['archive', 'create', 'anniversary', 'anniversaryEdit', 'insights', 'profile', 'binding', 'suggestion', 'suggestionAdmin'].includes(requestedTarget)) target.value = requestedTarget
 })
 
 const continueToTarget = () => {
   if (target.value === 'create') {
     uni.redirectTo({ url: '/pages/create/index' })
+    return
+  }
+  if (target.value === 'anniversaryEdit') {
+    uni.redirectTo({ url: '/pages/anniversary/edit' })
     return
   }
   if (target.value === 'binding') {
@@ -40,8 +44,9 @@ const continueToTarget = () => {
     uni.redirectTo({ url: '/pages/suggestion/list' })
     return
   }
-  const tabPaths: Record<Exclude<LoginTarget, 'create' | 'binding' | 'suggestion' | 'suggestionAdmin'>, string> = {
+  const tabPaths: Record<Exclude<LoginTarget, 'create' | 'anniversaryEdit' | 'binding' | 'suggestion' | 'suggestionAdmin'>, string> = {
     archive: '/pages/index/index',
+    anniversary: '/pages/anniversary/index',
     insights: '/pages/insights/index',
     profile: '/pages/profile/index',
   }
