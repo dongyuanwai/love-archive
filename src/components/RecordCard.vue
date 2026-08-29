@@ -8,6 +8,15 @@ import { useArchiveStore } from '@/stores/archive'
 defineProps<{ record: MoodRecord; responding?: boolean }>()
 const emit = defineEmits<{ respond: [id: string]; open: [id: string] }>()
 const store = useArchiveStore()
+
+const previewImages = (record: MoodRecord, index: number) => {
+  const urls = record.images.map((image) => image.url).filter(Boolean)
+  if (!urls.length) return
+  uni.previewImage({
+    current: urls[index] || urls[0],
+    urls,
+  })
+}
 </script>
 
 <template>
@@ -34,6 +43,23 @@ const store = useArchiveStore()
     </view>
 
     <text class="record__content">{{ record.content }}</text>
+
+    <view
+      v-if="record.images.length"
+      class="record-images"
+      :class="`record-images--${record.images.length}`"
+      @tap.stop
+    >
+      <image
+        v-for="(image, index) in record.images"
+        :key="image.id"
+        class="record-image"
+        :src="image.thumbnailUrl || image.url"
+        mode="aspectFill"
+        lazy-load
+        @tap.stop="previewImages(record, index)"
+      />
+    </view>
 
     <view class="record__footer" @tap.stop>
       <button
@@ -84,6 +110,12 @@ const store = useArchiveStore()
 .emotion-chip--happy { background: #fff0e4; color: #8e5639; }
 .emotion-chip--sad { background: #eef3f8; color: #58708a; }
 .record__content { display: block; margin: 24rpx 0 22rpx; color: #473b38; font-size: 28rpx; line-height: 1.78; }
+.record-images { display: grid; gap: 10rpx; margin: 0 0 22rpx; overflow: hidden; border-radius: 21rpx; }
+.record-images--1 { width: 72%; height: 320rpx; grid-template-columns: 1fr; }
+.record-images--2 { height: 250rpx; grid-template-columns: repeat(2, 1fr); }
+.record-images--3 { height: 300rpx; grid-template-columns: 1.35fr 1fr; grid-template-rows: repeat(2, 1fr); }
+.record-images--3 .record-image:first-child { grid-row: 1 / 3; }
+.record-image { display: block; width: 100%; height: 100%; background: #f5ece7; }
 .record__footer { gap: 16rpx; padding-top: 19rpx; border-top: 1rpx solid #f1e8e3; }
 .action { gap: 8rpx; min-height: 58rpx; flex: 1; justify-content: center; border-radius: 18rpx; background: transparent; color: #786b67; font-size: 23rpx; }
 .action--response { min-height: 50rpx; padding: 0 18rpx; flex: 0 0 auto; border-radius: 16rpx; background: #fbf4ef; font-size: 21rpx; }

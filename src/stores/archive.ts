@@ -154,7 +154,7 @@ export const useArchiveStore = defineStore('archive', {
       this.records.unshift({
         id: `r-${Date.now()}`,
         authorId: 'me', authorName: this.user.name, ...payload, createdAt,
-        likedByPartner: false, huggedByPartner: false, comments: [],
+        likedByPartner: false, huggedByPartner: false, images: [], comments: [],
         relationshipId: payload.visibility === 'partner' && this.relationship.active ? this.relationship.id : undefined,
         isBackfilled: payload.recordDate !== todayString(),
       })

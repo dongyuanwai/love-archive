@@ -6,7 +6,19 @@ import MoodMark from '@/components/MoodMark.vue'
 import { useArchiveStore } from '@/stores/archive'
 import type { MoodKind, Visibility } from '@/types/domain'
 import { todayString } from '@/utils/date'
-import { createMood } from '@/api/moods'
+import { createMood, deletePendingMoodImage, uploadMoodImage } from '@/api/moods'
+
+type DraftImageStatus = 'compressing' | 'ready' | 'uploading' | 'uploaded' | 'failed' | 'removing'
+
+interface DraftImage {
+  localId: string
+  filePath: string
+  status: DraftImageStatus
+  uploadedId?: string
+  error?: string
+}
+
+const maxMoodImages = 3
 
 const store = useArchiveStore()
 const mood = ref<MoodKind>('happy')
@@ -16,6 +28,10 @@ const recordDate = ref(todayString())
 const visibility = ref<Visibility>('partner')
 const allowComments = ref(true)
 const publishing = ref(false)
+const selectingImages = ref(false)
+const draftImages = ref<DraftImage[]>([])
+const publishStage = ref<'idle' | 'uploading' | 'creating'>('idle')
+const uploadingNumber = ref(0)
 
 const emotionOptions: Record<MoodKind, string[]> = {
   happy: ['愉快', '安心', '期待', '感动', '兴奋', '被爱'],
@@ -23,7 +39,27 @@ const emotionOptions: Record<MoodKind, string[]> = {
 }
 
 const characterCount = computed(() => content.value.length)
-const canPublish = computed(() => content.value.trim().length > 0 && characterCount.value <= 1000 && !publishing.value)
+const remainingImageCount = computed(() => maxMoodImages - draftImages.value.length)
+const imageBusy = computed(() => draftImages.value.some((image) => ['compressing', 'uploading', 'removing'].includes(image.status)))
+const canPublish = computed(() => (
+  content.value.trim().length > 0
+  && characterCount.value <= 1000
+  && !publishing.value
+  && !selectingImages.value
+  && !imageBusy.value
+))
+const imageHint = computed(() => {
+  if (publishStage.value === 'uploading') return `正在上传第 ${uploadingNumber.value} 张照片…`
+  if (draftImages.value.some((image) => image.status === 'failed')) return '有照片上传失败，再次发布会从这里继续'
+  if (draftImages.value.length && draftImages.value.every((image) => image.status === 'uploaded')) return '照片已上传，发布失败也无需重复上传'
+  return '最多 3 张'
+})
+const publishLabel = computed(() => {
+  if (!store.user.isLoggedIn) return '登录后收藏这一刻'
+  if (publishStage.value === 'uploading') return `正在上传照片 ${uploadingNumber.value}/${draftImages.value.length}…`
+  if (publishing.value) return '正在收藏…'
+  return '收藏这一刻'
+})
 
 onShow(() => {
   if (!store.activeRelationship) visibility.value = 'private'
@@ -39,17 +75,134 @@ const toggleComments = (event: unknown) => {
   allowComments.value = (event as { detail: { value: boolean } }).detail.value
 }
 
+const compressImage = (src: string) => new Promise<string>((resolve) => {
+  uni.compressImage({
+    src,
+    quality: 80,
+    compressedWidth: 1440,
+    success: (result) => resolve(result.tempFilePath || src),
+    fail: () => resolve(src),
+  })
+})
+
+const chooseImages = async () => {
+  if (selectingImages.value || publishing.value || remainingImageCount.value <= 0) return
+
+  selectingImages.value = true
+  try {
+    const result = await new Promise<{ tempFiles: Array<{ tempFilePath: string }> }>((resolve, reject) => {
+      uni.chooseMedia({
+        count: remainingImageCount.value,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed'],
+        success: resolve,
+        fail: reject,
+      })
+    })
+    const selected = result.tempFiles.slice(0, remainingImageCount.value).map((file, index): DraftImage => ({
+      localId: `draft-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+      filePath: file.tempFilePath,
+      status: 'compressing',
+    }))
+    draftImages.value.push(...selected)
+
+    await Promise.all(selected.map(async (image) => {
+      image.filePath = await compressImage(image.filePath)
+      image.status = 'ready'
+    }))
+  } catch (error) {
+    const message = error && typeof error === 'object' && 'errMsg' in error
+      ? String((error as { errMsg?: string }).errMsg || '')
+      : ''
+    if (!message.toLowerCase().includes('cancel')) {
+      uni.showToast({ title: '暂时无法选择照片，请重试', icon: 'none' })
+    }
+  } finally {
+    selectingImages.value = false
+  }
+}
+
+const previewImage = (index: number) => {
+  const urls = draftImages.value.map((image) => image.filePath).filter(Boolean)
+  if (!urls.length) return
+  uni.previewImage({
+    current: urls[index] || urls[0],
+    urls,
+  })
+}
+
+const imageStatusLabel = (status: DraftImageStatus) => ({
+  compressing: '压缩中',
+  ready: '',
+  uploading: '上传中',
+  uploaded: '已上传',
+  failed: '上传失败',
+  removing: '移除中',
+}[status])
+
+const removeImage = async (image: DraftImage) => {
+  if (publishing.value || selectingImages.value || ['compressing', 'uploading', 'removing'].includes(image.status)) return
+
+  if (!image.uploadedId) {
+    draftImages.value = draftImages.value.filter((item) => item.localId !== image.localId)
+    return
+  }
+
+  image.status = 'removing'
+  try {
+    await deletePendingMoodImage(image.uploadedId)
+    draftImages.value = draftImages.value.filter((item) => item.localId !== image.localId)
+  } catch (error) {
+    image.status = 'uploaded'
+    uni.showToast({
+      title: error instanceof Error ? error.message : '照片移除失败，请重试',
+      icon: 'none',
+    })
+  }
+}
+
+const uploadImages = async () => {
+  for (let index = 0; index < draftImages.value.length; index += 1) {
+    const image = draftImages.value[index]
+    if (!image || image.uploadedId) continue
+
+    uploadingNumber.value = index + 1
+    image.status = 'uploading'
+    image.error = undefined
+    try {
+      const uploaded = await uploadMoodImage(image.filePath)
+      image.uploadedId = uploaded.id
+      image.status = 'uploaded'
+    } catch (error) {
+      image.status = 'failed'
+      image.error = error instanceof Error ? error.message : '照片上传失败'
+      throw error
+    }
+  }
+
+  const imageIds = draftImages.value.map((image) => image.uploadedId).filter((id): id is string => Boolean(id))
+  if (imageIds.length !== draftImages.value.length) throw new Error('还有照片未上传完成')
+  return imageIds
+}
+
 const publish = async () => {
   if (!store.user.isLoggedIn) {
     uni.navigateTo({ url: '/pages/login/index?target=create&back=1' })
     return
   }
   if (!canPublish.value) {
-    uni.showToast({ title: '写下一点此刻的心情吧', icon: 'none' })
+    uni.showToast({
+      title: selectingImages.value || imageBusy.value ? '照片还在处理中，请稍候' : '写下一点此刻的心情吧',
+      icon: 'none',
+    })
     return
   }
   publishing.value = true
   try {
+    publishStage.value = draftImages.value.length ? 'uploading' : 'creating'
+    const imageIds = await uploadImages()
+    publishStage.value = 'creating'
     const record = await createMood({
       mood: mood.value,
       emotion: emotion.value,
@@ -57,9 +210,11 @@ const publish = async () => {
       recordDate: recordDate.value,
       visibility: visibility.value,
       allowComments: visibility.value === 'partner' && allowComments.value,
+      imageIds,
     }, store.user.id)
     store.prependRecord(record)
     content.value = ''
+    draftImages.value = []
     recordDate.value = todayString()
     uni.showToast({ title: '这一刻已被收藏', icon: 'success' })
     setTimeout(() => uni.switchTab({ url: '/pages/index/index' }), 650)
@@ -71,6 +226,8 @@ const publish = async () => {
     })
   } finally {
     publishing.value = false
+    publishStage.value = 'idle'
+    uploadingNumber.value = 0
   }
 }
 </script>
@@ -108,6 +265,60 @@ const publish = async () => {
       <view class="writing-card__meta"><text>慢慢写，不着急</text><text>{{ characterCount }}/1000</text></view>
     </view>
 
+    <view class="photo-card card">
+      <view class="photo-card__head">
+        <view class="photo-card__intro">
+          <text class="photo-card__title">这一刻的照片</text>
+          <text class="photo-card__hint">{{ imageHint }}</text>
+        </view>
+        <text class="photo-card__count">{{ draftImages.length }}/{{ maxMoodImages }}</text>
+      </view>
+
+      <view class="photo-grid">
+        <view
+          v-for="(image, index) in draftImages"
+          :key="image.localId"
+          class="draft-photo"
+          hover-class="tap-muted"
+          role="button"
+          :aria-label="`预览第 ${index + 1} 张照片`"
+          @tap="previewImage(index)"
+        >
+          <image class="draft-photo__image" :src="image.filePath" mode="aspectFill" />
+          <view
+            v-if="['uploading', 'uploaded', 'failed', 'removing'].includes(image.status)"
+            class="draft-photo__status"
+            :class="[`draft-photo__status--${image.status}`]"
+          >
+            <text>{{ imageStatusLabel(image.status) }}</text>
+          </view>
+          <view
+            class="draft-photo__remove"
+            :class="{ 'draft-photo__remove--disabled': publishing || selectingImages || ['compressing', 'uploading', 'removing'].includes(image.status) }"
+            hover-class="tap-muted"
+            role="button"
+            aria-label="移除照片"
+            @tap.stop="removeImage(image)"
+          >
+            <text>×</text>
+          </view>
+        </view>
+
+        <view
+          v-if="remainingImageCount > 0"
+          class="photo-add"
+          :class="{ 'photo-add--disabled': selectingImages || publishing }"
+          hover-class="tap-muted"
+          role="button"
+          aria-label="添加照片"
+          @tap="chooseImages"
+        >
+          <view class="photo-add__icon"><AppIcon name="plus" :size="23" /></view>
+          <text>{{ draftImages.length ? '继续添加' : '添加照片' }}</text>
+        </view>
+      </view>
+    </view>
+
     <view class="settings card">
       <picker mode="date" :value="recordDate" :end="todayString()" @change="chooseDate">
         <view class="setting-row">
@@ -130,7 +341,7 @@ const publish = async () => {
       </view>
     </view>
 
-    <button class="primary-button publish" :class="{ 'publish--disabled': store.user.isLoggedIn && !canPublish }" :loading="publishing" :disabled="publishing" @tap="publish">{{ !store.user.isLoggedIn ? '登录后收藏这一刻' : (publishing ? '正在收藏…' : '收藏这一刻') }}</button>
+    <button class="primary-button publish" :class="{ 'publish--disabled': store.user.isLoggedIn && !canPublish }" :loading="publishing" :disabled="publishing || selectingImages" @tap="publish">{{ publishLabel }}</button>
     <text class="privacy-note"><AppIcon name="lock" :size="13" />你的私密记录不会出现在 TA 的报告里</text>
   </view>
 </template>
@@ -159,6 +370,26 @@ const publish = async () => {
 .writing-card__input { width: 100%; min-height: 280rpx; color: #453a37; font-size: 29rpx; line-height: 1.75; }
 .writing-card__meta { display: flex; justify-content: space-between; color: #a0928e; font-size: 21rpx; }
 :deep(.writing-placeholder) { color: #b4a6a1; }
+.photo-card { margin-top: 26rpx; padding: 26rpx; }
+.photo-card__head { display: flex; align-items: flex-start; justify-content: space-between; }
+.photo-card__intro { min-width: 0; flex: 1; }
+.photo-card__title, .photo-card__hint { display: block; }
+.photo-card__title { color: #4d403d; font-size: 27rpx; font-weight: 700; }
+.photo-card__hint { margin-top: 8rpx; color: #9a8b87; font-size: 20rpx; line-height: 1.45; }
+.photo-card__count { flex: none; margin-left: 20rpx; color: #b06d62; font-size: 22rpx; font-weight: 650; }
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14rpx; margin-top: 22rpx; }
+.draft-photo, .photo-add { position: relative; display: flex; height: 176rpx; overflow: hidden; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 21rpx; }
+.draft-photo { background: #f4e9e3; }
+.draft-photo__image { display: block; width: 100%; height: 100%; }
+.draft-photo__status { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(61, 48, 45, .48); color: #fff; font-size: 20rpx; font-weight: 650; }
+.draft-photo__status--uploaded { inset: auto auto 9rpx 9rpx; min-height: 38rpx; padding: 0 12rpx; border-radius: 999rpx; background: rgba(63, 96, 72, .82); font-size: 18rpx; }
+.draft-photo__status--failed { background: rgba(139, 67, 59, .66); }
+.draft-photo__remove { position: absolute; top: 8rpx; right: 8rpx; display: flex; width: 42rpx; height: 42rpx; align-items: center; justify-content: center; border-radius: 50%; background: rgba(55, 43, 40, .72); color: #fff; font-size: 32rpx; line-height: 1; }
+.draft-photo__remove text { transform: translateY(-1rpx); }
+.draft-photo__remove--disabled { opacity: .5; }
+.photo-add { flex-direction: column; gap: 10rpx; border: 2rpx dashed #e4c9bd; background: #fff9f5; color: #9a6258; font-size: 21rpx; }
+.photo-add__icon { display: flex; width: 52rpx; height: 52rpx; align-items: center; justify-content: center; border-radius: 18rpx; background: #ffebe1; }
+.photo-add--disabled { opacity: .5; }
 .settings { margin-top: 26rpx; padding: 4rpx 24rpx; }
 .setting-row { display: flex; min-height: 124rpx; align-items: center; justify-content: space-between; }
 .setting-row--top { border-top: 1rpx solid #f1e9e4; }

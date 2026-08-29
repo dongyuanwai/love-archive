@@ -23,6 +23,14 @@ export interface Comment {
   isEdited?: boolean
 }
 
+export interface MoodImage {
+  id: string
+  url: string
+  thumbnailUrl?: string
+  width?: number
+  height?: number
+}
+
 export interface MoodRecord {
   id: string
   authorId: AuthorId
@@ -37,6 +45,7 @@ export interface MoodRecord {
   allowComments: boolean
   likedByPartner: boolean
   huggedByPartner: boolean
+  images: MoodImage[]
   comments: Comment[]
   relationshipId?: string
   isBackfilled?: boolean

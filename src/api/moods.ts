@@ -1,5 +1,7 @@
-import type { AuthorId, Comment, MoodKind, MoodRecord, Visibility } from '@/types/domain'
+import type { AuthorId, Comment, MoodImage, MoodKind, MoodRecord, Visibility } from '@/types/domain'
 import { resolveAssetUrl } from '@/utils/assets'
+import { API_BASE_URL } from '@/config/env'
+import { getAccessToken } from './token'
 import { apiRequest } from './request'
 
 type ApiMoodKind = 'HAPPY' | 'SAD'
@@ -20,6 +22,14 @@ interface ApiComment {
   author: ApiUserSummary
 }
 
+interface ApiMoodImage {
+  id: string
+  url: string
+  thumbnailUrl?: string | null
+  width?: number | null
+  height?: number | null
+}
+
 interface ApiMoodRecord {
   id: string
   authorId: string
@@ -37,6 +47,7 @@ interface ApiMoodRecord {
   hasResponse: boolean
   author: ApiUserSummary
   comments: ApiComment[]
+  images?: ApiMoodImage[] | null
 }
 
 interface MoodListResponse {
@@ -75,6 +86,11 @@ export interface CreateMoodInput {
   recordDate: string
   visibility: Visibility
   allowComments: boolean
+  imageIds?: string[]
+}
+
+export interface UploadedMoodImage {
+  id: string
 }
 
 const toComment = (comment: ApiComment, currentUserId?: string): Comment => ({
@@ -85,6 +101,14 @@ const toComment = (comment: ApiComment, currentUserId?: string): Comment => ({
   content: comment.content,
   createdAt: comment.createdAt,
   isEdited: comment.isEdited,
+})
+
+const toMoodImage = (image: ApiMoodImage): MoodImage => ({
+  id: image.id,
+  url: resolveAssetUrl(image.url),
+  thumbnailUrl: image.thumbnailUrl ? resolveAssetUrl(image.thumbnailUrl) : undefined,
+  width: image.width ?? undefined,
+  height: image.height ?? undefined,
 })
 
 export const toMoodRecord = (record: ApiMoodRecord, currentUserId?: string): MoodRecord => {
@@ -104,10 +128,62 @@ export const toMoodRecord = (record: ApiMoodRecord, currentUserId?: string): Moo
     allowComments: record.allowComments,
     likedByPartner: mood === 'happy' && (record.authorRole === 'me' ? record.hasResponse : record.hasReacted),
     huggedByPartner: mood === 'sad' && (record.authorRole === 'me' ? record.hasResponse : record.hasReacted),
+    images: (record.images ?? []).map(toMoodImage),
     comments: record.comments.map((comment) => toComment(comment, currentUserId)),
     relationshipId: record.relationshipId || undefined,
     isBackfilled: record.isBackfilled,
   }
+}
+
+const uploadErrorMessage = (data: unknown, fallback: string) => {
+  if (!data || typeof data !== 'object') return fallback
+  const message = (data as { message?: string | string[] }).message
+  if (Array.isArray(message)) return message.join('；')
+  return message || fallback
+}
+
+export function uploadMoodImage(filePath: string): Promise<UploadedMoodImage> {
+  const accessToken = getAccessToken()
+  if (!accessToken) return Promise.reject(new Error('请先登录'))
+
+  return new Promise((resolve, reject) => {
+    uni.uploadFile({
+      url: `${API_BASE_URL}/moods/images`,
+      filePath,
+      name: 'image',
+      header: { Authorization: `Bearer ${accessToken}` },
+      success: (response) => {
+        let data: unknown
+        try {
+          data = JSON.parse(response.data) as unknown
+        } catch {
+          reject(new Error('图片上传响应异常'))
+          return
+        }
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          const body = data as { id?: string; imageId?: string }
+          const id = body.id || body.imageId
+          if (!id) {
+            reject(new Error('图片上传响应缺少 ID'))
+            return
+          }
+          resolve({ id })
+          return
+        }
+
+        reject(new Error(uploadErrorMessage(data, '图片上传失败')))
+      },
+      fail: () => reject(new Error('图片上传失败，请检查网络')),
+    })
+  })
+}
+
+export function deletePendingMoodImage(id: string): Promise<void> {
+  return apiRequest<void>({
+    path: `/moods/images/${encodeURIComponent(id)}`,
+    method: 'DELETE',
+  })
 }
 
 export async function createMood(input: CreateMoodInput, currentUserId?: string): Promise<MoodRecord> {

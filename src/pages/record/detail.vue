@@ -23,6 +23,15 @@ const reactionLoading = ref(false)
 const commentSaving = ref(false)
 const commentDeletingId = ref('')
 
+const previewImages = (index: number) => {
+  const urls = record.value?.images.map((image) => image.url).filter(Boolean) || []
+  if (!urls.length) return
+  uni.previewImage({
+    current: urls[index] || urls[0],
+    urls,
+  })
+}
+
 const loadDetail = async () => {
   if (!recordId.value) {
     detailError.value = '缺少心情记录 ID'
@@ -153,6 +162,20 @@ const toggleReaction = async () => {
         <text v-if="record.isBackfilled" class="backfill">补记于 {{ record.recordDate }}</text>
       </view>
       <text class="detail-content">{{ record.content }}</text>
+      <view
+        v-if="record.images.length"
+        class="detail-images"
+        :class="`detail-images--${record.images.length}`"
+      >
+        <image
+          v-for="(image, index) in record.images"
+          :key="image.id"
+          class="detail-image"
+          :src="image.url"
+          mode="aspectFill"
+          @tap.stop="previewImages(index)"
+        />
+      </view>
       <view class="visibility"><AppIcon :name="record.visibility === 'private' ? 'lock' : 'heart'" :size="14" /><text>{{ record.visibility === 'private' ? '仅自己可见' : `我和 ${store.activeRelationship?.partnerName || 'TA'} 可见` }}</text></view>
     </view>
 
@@ -246,6 +269,12 @@ const toggleReaction = async () => {
 .mood-center__label { margin-top: 17rpx; font-size: 31rpx; font-weight: 750; }
 .backfill { margin-top: 7rpx; color: #998985; font-size: 21rpx; }
 .detail-content { display: block; font-size: 31rpx; line-height: 1.9; }
+.detail-images { display: grid; gap: 11rpx; margin-top: 26rpx; overflow: hidden; border-radius: 23rpx; }
+.detail-images--1 { height: 560rpx; grid-template-columns: 1fr; }
+.detail-images--2 { height: 340rpx; grid-template-columns: repeat(2, 1fr); }
+.detail-images--3 { height: 400rpx; grid-template-columns: 1.35fr 1fr; grid-template-rows: repeat(2, 1fr); }
+.detail-images--3 .detail-image:first-child { grid-row: 1 / 3; }
+.detail-image { display: block; width: 100%; height: 100%; background: #f4eae5; }
 .visibility { gap: 7rpx; margin-top: 28rpx; color: #8e7e7a; font-size: 22rpx; }
 .reaction-card { margin-top: 22rpx; padding: 12rpx; }
 .reaction { gap: 14rpx; min-height: 84rpx; padding: 0 18rpx; justify-content: flex-start; border-radius: 19rpx; background: #fff5ef; color: #8d554c; text-align: left; }
