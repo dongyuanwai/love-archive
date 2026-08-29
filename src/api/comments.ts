@@ -15,3 +15,10 @@ export function editComment(commentId: string, content: string): Promise<unknown
     data: { content: content.trim() },
   })
 }
+
+export function deleteComment(commentId: string): Promise<{ success: boolean }> {
+  return apiRequest({
+    path: `/comments/${commentId}`,
+    method: 'DELETE',
+  })
+}

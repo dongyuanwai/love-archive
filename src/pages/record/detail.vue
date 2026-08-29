@@ -8,7 +8,7 @@ import { useArchiveStore } from '@/stores/archive'
 import { formatDateTime } from '@/utils/date'
 import { getMoodDetail } from '@/api/moods'
 import { addReaction, removeReaction } from '@/api/reactions'
-import { createComment, editComment as requestEditComment } from '@/api/comments'
+import { createComment, deleteComment as requestDeleteComment, editComment as requestEditComment } from '@/api/comments'
 
 const store = useArchiveStore()
 const recordId = ref('')
@@ -21,6 +21,7 @@ const detailRefreshing = ref(false)
 const detailError = ref('')
 const reactionLoading = ref(false)
 const commentSaving = ref(false)
+const commentDeletingId = ref('')
 
 const loadDetail = async () => {
   if (!recordId.value) {
@@ -90,6 +91,29 @@ const saveComment = async (commentId: string) => {
   }
 }
 
+const removeComment = (commentId: string) => {
+  uni.showModal({
+    title: '删除这条评论？',
+    content: '删除后无法恢复，只会删除你自己的这条评论。',
+    confirmText: '删除',
+    confirmColor: '#c9574d',
+    success: async (result) => {
+      if (!result.confirm || commentDeletingId.value) return
+      commentDeletingId.value = commentId
+      try {
+        await requestDeleteComment(commentId)
+        if (editingCommentId.value === commentId) cancelEditComment()
+        await loadDetail()
+        uni.showToast({ title: '评论已删除', icon: 'success' })
+      } catch (error) {
+        uni.showToast({ title: error instanceof Error ? error.message : '评论删除失败', icon: 'none' })
+      } finally {
+        commentDeletingId.value = ''
+      }
+    },
+  })
+}
+
 const toggleReaction = async () => {
   if (!record.value || reactionLoading.value) return
   if (record.value.authorId === 'me') {
@@ -115,7 +139,7 @@ const toggleReaction = async () => {
     <view class="empty-state card"><LoadingIndicator text="正在打开这份心情…" /></view>
   </view>
   <view v-else-if="record" class="page-shell detail-page">
-    <LoadingIndicator v-if="detailRefreshing && !reactionLoading && !commentSaving" class="detail-sync" text="正在同步心情详情" compact />
+    <LoadingIndicator v-if="detailRefreshing && !reactionLoading && !commentSaving && !commentDeletingId" class="detail-sync" text="正在同步心情详情" compact />
     <view class="detail-card card" :class="`detail-card--${record.mood}`">
       <view class="detail-card__top">
         <view class="author">
@@ -171,11 +195,15 @@ const toggleReaction = async () => {
             <view class="comment-meta__actions">
               <text>{{ formatDateTime(item.createdAt) }}</text>
               <text v-if="item.isEdited" class="edited-tag">已编辑</text>
-              <button
-                v-if="item.authorId === 'me' && editingCommentId !== item.id"
-                class="edit-comment"
-                @tap="startEditComment(item.id, item.content)"
-              >编辑</button>
+              <view v-if="item.authorId === 'me' && editingCommentId !== item.id" class="comment-owner-actions">
+                <view class="comment-action" hover-class="comment-action--hover" @tap="startEditComment(item.id, item.content)">编辑</view>
+                <view
+                  class="comment-action comment-action--delete"
+                  :class="{ 'comment-action--disabled': Boolean(commentDeletingId) }"
+                  hover-class="comment-action--hover"
+                  @tap="removeComment(item.id)"
+                >{{ commentDeletingId === item.id ? '删除中' : '删除' }}</view>
+              </view>
             </view>
           </view>
           <view v-if="editingCommentId === item.id" class="comment-editor">
@@ -243,7 +271,11 @@ const toggleReaction = async () => {
 .comment-meta__actions { display: flex; align-items: center; gap: 14rpx; }
 .comment-meta__actions > text { color: #aa9b97; font-size: 19rpx; font-weight: 400; }
 .edited-tag { color: #9b8883 !important; }
-.edit-comment { min-width: 76rpx; min-height: 56rpx; padding: 0 14rpx; border-radius: 16rpx; background: #f8f1ec; color: #9b5f56; font-size: 20rpx; }
+.comment-owner-actions { display: flex; align-items: center; gap: 8rpx; }
+.comment-action { display: flex; min-width: 68rpx; min-height: 52rpx; padding: 0 12rpx; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 15rpx; background: #f8f1ec; color: #9b5f56; font-size: 20rpx; font-weight: 500; line-height: 1; }
+.comment-action--delete { background: #fff1ef; color: #bd5147; }
+.comment-action--hover { opacity: .72; }
+.comment-action--disabled { opacity: .45; }
 .comment-text { display: block; margin-top: 10rpx; line-height: 1.65; }
 .comment-editor { margin-top: 14rpx; padding: 14rpx; border-radius: 18rpx; background: #fbf6f2; }
 .comment-editor__input { min-height: 72rpx; padding: 0 18rpx; border: 1rpx solid #e7d8d0; border-radius: 16rpx; background: #fff; }
