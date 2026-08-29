@@ -16,14 +16,20 @@ const nickname = ref('')
 const loginStep = ref<'identity' | 'profile'>('identity')
 const pendingUser = ref<LoginUser | null>(null)
 const target = ref<LoginTarget>('archive')
+const returnBack = ref(false)
 const canLogin = computed(() => Boolean(avatarPath.value && nickname.value.trim()) && !loginLoading.value)
 
 onLoad((query) => {
   const requestedTarget = String(query?.target || 'archive') as LoginTarget
   if (['archive', 'create', 'anniversary', 'anniversaryEdit', 'insights', 'profile', 'binding', 'suggestion', 'suggestionAdmin'].includes(requestedTarget)) target.value = requestedTarget
+  returnBack.value = String(query?.back || '') === '1'
 })
 
 const continueToTarget = () => {
+  if (returnBack.value && getCurrentPages().length > 1) {
+    uni.navigateBack()
+    return
+  }
   if (target.value === 'create') {
     uni.redirectTo({ url: '/pages/create/index' })
     return

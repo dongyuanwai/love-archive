@@ -5,11 +5,6 @@ export type LoginTarget = 'archive' | 'create' | 'anniversary' | 'anniversaryEdi
 const userStorageKey = 'love-archive:test-new-user'
 
 const protectedRouteTargets: Record<string, LoginTarget> = {
-  '/pages/create/index': 'create',
-  '/pages/anniversary/index': 'anniversary',
-  '/pages/anniversary/edit': 'anniversaryEdit',
-  '/pages/insights/index': 'insights',
-  '/pages/profile/index': 'profile',
   '/pages/binding/index': 'binding',
   '/pages/suggestion/index': 'suggestion',
   '/pages/suggestion/list': 'suggestionAdmin',
@@ -37,6 +32,8 @@ export const isLocallyAuthenticated = () => {
 
 export const getLoginTarget = (url?: string): LoginTarget =>
   protectedRouteTargets[normalizePath(url || currentRoute())] || 'archive'
+
+export const shouldAutoRedirectToLogin = () => currentRoute() !== '/pages/index/index'
 
 export const redirectToLogin = (target: LoginTarget = getLoginTarget()) => {
   if (currentRoute() === '/pages/login/index' || redirectingToLogin) return

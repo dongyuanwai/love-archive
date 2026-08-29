@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { resolveAssetUrl } from '@/utils/assets'
 import type { MoodKind, MoodRecord, Relationship, UserProfile, Visibility } from '@/types/domain'
 import { todayString } from '@/utils/date'
-import { clearTokens } from '@/api/token'
+import { clearTokens, getAccessToken } from '@/api/token'
 import type { CurrentRelationshipResponse, RelationshipInvite } from '@/api/relationships'
 
 const userStorageKey = 'love-archive:test-new-user'
@@ -15,7 +15,7 @@ const createEmptyRelationship = (): Relationship => ({
 const getStoredUser = (): UserProfile => {
   try {
     const stored = uni.getStorageSync(userStorageKey) as Partial<UserProfile> | undefined
-    if (!stored?.isLoggedIn || !stored.name) return { ...defaultUser }
+    if (!stored?.isLoggedIn || !stored.name || !getAccessToken()) return { ...defaultUser }
     return {
       id: stored.id,
       name: stored.name,

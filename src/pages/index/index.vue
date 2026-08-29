@@ -12,6 +12,7 @@ import { listMoods, type MoodListScope } from '@/api/moods'
 import { acceptRelationshipInvite, createRelationshipInvite, getCurrentRelationship } from '@/api/relationships'
 import { addReaction, removeReaction } from '@/api/reactions'
 import { getMoodDetail } from '@/api/moods'
+import { ApiError } from '@/api/request'
 import { syncTabBarSelection } from '@/utils/tab-bar'
 import { anniversaryKindLabels, formatAnniversaryDate, getAnniversaryStatus } from '@/utils/anniversary'
 
@@ -85,6 +86,14 @@ const resetFeeds = () => {
   filterKeys.forEach((key) => Object.assign(feeds[key], createFeedState()))
 }
 
+const handleExpiredSession = (error: unknown) => {
+  if (!(error instanceof ApiError) || error.statusCode !== 401) return false
+  store.logout()
+  anniversaryStore.reset()
+  resetFeeds()
+  return true
+}
+
 const updateCachedRecord = (record: MoodRecord) => {
   filterKeys.forEach((key) => {
     const index = feeds[key].items.findIndex((item) => item.id === record.id)
@@ -115,6 +124,7 @@ const loadRecords = async (scope: ArchiveFilter = filter.value, showLoading = tr
     moodPage.items.forEach((record) => store.upsertRecord(record))
   } catch (error) {
     if (requestId !== feedRequestIds[scope] || !store.user.isLoggedIn) return
+    if (handleExpiredSession(error)) return
     feed.error = error instanceof Error ? error.message : '心情列表加载失败'
   } finally {
     if (requestId === feedRequestIds[scope]) {
@@ -136,6 +146,7 @@ const loadPageContext = async () => {
     store.setCurrentRelationship(relationshipResult)
     if (filter.value === 'partner' && !relationshipResult.active) void ensureInviteCode()
   } catch (error) {
+    if (handleExpiredSession(error)) return
     console.warn('首页状态加载失败', error)
   }
 }
@@ -208,13 +219,9 @@ const respondToMood = async (id: string) => {
   }
 }
 const goLogin = (target: 'create' | 'binding' | 'profile') => uni.navigateTo({ url: `/pages/login/index?target=${target}` })
-const goCreate = () => store.user.isLoggedIn ? uni.navigateTo({ url: '/pages/create/index' }) : goLogin('create')
-const goAnniversary = () => store.user.isLoggedIn
-  ? uni.switchTab({ url: '/pages/anniversary/index' })
-  : uni.navigateTo({ url: '/pages/login/index?target=anniversary' })
-const goAddAnniversary = () => store.user.isLoggedIn
-  ? uni.navigateTo({ url: '/pages/anniversary/edit' })
-  : uni.navigateTo({ url: '/pages/login/index?target=anniversaryEdit' })
+const goCreate = () => uni.navigateTo({ url: '/pages/create/index' })
+const goAnniversary = () => uni.switchTab({ url: '/pages/anniversary/index' })
+const goAddAnniversary = () => uni.navigateTo({ url: '/pages/anniversary/edit' })
 const goBinding = () => store.user.isLoggedIn ? uni.navigateTo({ url: '/pages/binding/index' }) : goLogin('binding')
 const copyInviteCode = () => {
   if (!store.inviteCode) return
@@ -284,6 +291,15 @@ watch(filter, (value) => {
           <text v-else>{{ store.activeRelationship?.partnerInitial || '?' }}</text>
         </view>
       </view>
+    </view>
+
+    <view v-if="!store.user.isLoggedIn" class="guest-guide card">
+      <view class="guest-guide__icon"><AppIcon name="heart" :size="23" filled /></view>
+      <view class="guest-guide__copy">
+        <text class="guest-guide__title">不用登录，先随便看看</text>
+        <text class="guest-guide__desc">你可以先浏览功能，也可以先填写心情和重要日子；需要保存时，再自主选择微信登录。</text>
+      </view>
+      <view class="guest-guide__action" role="button" hover-class="heading-action--pressed" @tap="goLogin('profile')">去登录</view>
     </view>
 
     <view class="special-days-heading">
@@ -364,7 +380,7 @@ watch(filter, (value) => {
       <view class="special-day-empty__icon"><AppIcon name="calendar" :size="27" /></view>
       <view class="special-day-empty__copy">
         <text class="special-day-empty__title">收藏第一个重要日子</text>
-        <text class="special-day-empty__desc">{{ store.user.isLoggedIn ? '点击右上角“添加”，从纪念日或生日开始' : '登录后记录纪念日、生日与特别相遇' }}</text>
+        <text class="special-day-empty__desc">{{ store.user.isLoggedIn ? '点击右上角“添加”，从纪念日或生日开始' : '可以先填写纪念日或生日，需要保存时再登录' }}</text>
       </view>
     </view>
 
@@ -442,8 +458,7 @@ watch(filter, (value) => {
     <view v-else class="empty-state card">
       <text class="empty-state__title">这里还没有心情</text>
       <text class="empty-state__desc">不需要写得完美，留下此刻就很好。</text>
-      <button v-if="store.user.isLoggedIn" class="empty-create" @tap="goCreate">记录第一条心情</button>
-      <button v-else class="empty-create" @tap="goLogin('create')">登录后开始记录</button>
+      <button class="empty-create" @tap="goCreate">{{ store.user.isLoggedIn ? '记录第一条心情' : '先试着记录此刻' }}</button>
     </view>
   </view>
 </template>
@@ -451,6 +466,10 @@ watch(filter, (value) => {
 <style scoped lang="scss">
 .archive-page { padding-top: 24rpx; padding-bottom: calc(104rpx + env(safe-area-inset-bottom)); }
 .hero { display: flex; align-items: flex-start; justify-content: space-between; padding: 12rpx 2rpx 38rpx; }
+.guest-guide{display:flex;margin-bottom:28rpx;padding:24rpx;align-items:center;border-color:#efd8d0;background:rgba(255,250,246,.88)}
+.guest-guide__icon{display:flex;width:62rpx;height:62rpx;flex:none;align-items:center;justify-content:center;border-radius:21rpx;background:#ffe8df;color:#b45f53}
+.guest-guide__copy{min-width:0;flex:1;margin-left:18rpx}.guest-guide__title,.guest-guide__desc{display:block}.guest-guide__title{color:#493c39;font-size:25rpx;font-weight:750}.guest-guide__desc{margin-top:7rpx;color:#847672;font-size:20rpx;line-height:1.55}
+.guest-guide__action{display:flex;min-width:98rpx;height:58rpx;margin-left:16rpx;padding:0 16rpx;align-items:center;justify-content:center;border-radius:19rpx;background:#fff0e8;color:#a45d52;font-size:21rpx;font-weight:700;line-height:1}
 .hero__title { display: block; max-width: 500rpx; margin-top: 18rpx; font-size: 48rpx; font-weight: 750; line-height: 1.32; letter-spacing: 1rpx; }
 .hero__sub { display: block; max-width: 510rpx; margin-top: 18rpx; color: #736562; font-size: 25rpx; line-height: 1.65; }
 .paired-avatars { display: flex; margin-top: 10rpx; }

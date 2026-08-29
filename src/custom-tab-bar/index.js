@@ -1,6 +1,3 @@
-const userStorageKey = 'love-archive:test-new-user'
-const accessTokenKey = 'love-archive:access-token'
-
 Component({
   data: {
     selected: 0,
@@ -16,21 +13,18 @@ Component({
       {
         pagePath: '/pages/anniversary/index',
         text: '纪念日',
-        target: 'anniversary',
         iconPath: '/static/icons/tabbar/create.png',
         selectedIconPath: '/static/icons/tabbar/create-active.png',
       },
       {
         pagePath: '/pages/insights/index',
         text: '回顾',
-        target: 'insights',
         iconPath: '/static/icons/tabbar/insights.png',
         selectedIconPath: '/static/icons/tabbar/insights-active.png',
       },
       {
         pagePath: '/pages/profile/index',
         text: '我的',
-        target: 'profile',
         iconPath: '/static/icons/tabbar/profile.png',
         selectedIconPath: '/static/icons/tabbar/profile-active.png',
       },
@@ -59,15 +53,6 @@ Component({
       if (!item) return
 
       if (index === this.data.selected) return
-
-      if (item.target) {
-        const user = wx.getStorageSync(userStorageKey)
-        const accessToken = wx.getStorageSync(accessTokenKey)
-        if (!user || !user.isLoggedIn || !accessToken) {
-          wx.navigateTo({ url: `/pages/login/index?target=${item.target}` })
-          return
-        }
-      }
 
       this.setData({ selected: index })
       wx.switchTab({

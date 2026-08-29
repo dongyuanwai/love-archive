@@ -168,6 +168,10 @@ const toggleReminder = (value: number) => {
 
 const save = async () => {
   if (saving.value) return
+  if (!archiveStore.user.isLoggedIn) {
+    uni.navigateTo({ url: '/pages/login/index?target=anniversaryEdit&back=1' })
+    return
+  }
   const normalizedTitle = title.value.trim()
   if (!normalizedTitle) {
     uni.showToast({ title: '请填写日子名称', icon: 'none' })
@@ -329,8 +333,8 @@ const remove = () => {
       </view>
     </view>
 
-    <button v-if="!initialLoading && !loadError" class="save-button" :disabled="!canSave" :loading="saving" @tap="save">{{ saving ? '正在保存' : (isEditing ? '保存修改' : '收藏这个日子') }}</button>
-    <button v-if="isEditing && !initialLoading && !loadError" class="delete-button" :disabled="deleting" :loading="deleting" @tap="remove">{{ deleting ? '正在删除' : '删除这个日子' }}</button>
+    <button v-if="!initialLoading && !loadError" class="save-button" :disabled="archiveStore.user.isLoggedIn && !canSave" :loading="saving" @tap="save">{{ !archiveStore.user.isLoggedIn ? '登录后保存这个日子' : (saving ? '正在保存' : (isEditing ? '保存修改' : '收藏这个日子')) }}</button>
+    <button v-if="archiveStore.user.isLoggedIn && isEditing && !initialLoading && !loadError" class="delete-button" :disabled="deleting" :loading="deleting" @tap="remove">{{ deleting ? '正在删除' : '删除这个日子' }}</button>
   </view>
 </template>
 

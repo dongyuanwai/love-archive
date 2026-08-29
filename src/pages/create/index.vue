@@ -15,8 +15,6 @@ const content = ref('')
 const recordDate = ref(todayString())
 const visibility = ref<Visibility>('partner')
 const allowComments = ref(true)
-const redirectingToLogin = ref(false)
-const loginPrompted = ref(false)
 const publishing = ref(false)
 
 const emotionOptions: Record<MoodKind, string[]> = {
@@ -28,22 +26,6 @@ const characterCount = computed(() => content.value.length)
 const canPublish = computed(() => content.value.trim().length > 0 && characterCount.value <= 1000 && !publishing.value)
 
 onShow(() => {
-  if (!store.user.isLoggedIn) {
-    if (loginPrompted.value) {
-      loginPrompted.value = false
-      uni.switchTab({ url: '/pages/index/index' })
-      return
-    }
-    if (redirectingToLogin.value) return
-    redirectingToLogin.value = true
-    loginPrompted.value = true
-    uni.navigateTo({
-      url: '/pages/login/index?target=create',
-      complete: () => { redirectingToLogin.value = false },
-    })
-    return
-  }
-  loginPrompted.value = false
   if (!store.activeRelationship) visibility.value = 'private'
 })
 
@@ -59,7 +41,7 @@ const toggleComments = (event: unknown) => {
 
 const publish = async () => {
   if (!store.user.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/login/index?target=create' })
+    uni.navigateTo({ url: '/pages/login/index?target=create&back=1' })
     return
   }
   if (!canPublish.value) {
@@ -148,7 +130,7 @@ const publish = async () => {
       </view>
     </view>
 
-    <button class="primary-button publish" :class="{ 'publish--disabled': !canPublish }" :loading="publishing" :disabled="publishing" @tap="publish">{{ publishing ? '正在收藏…' : '收藏这一刻' }}</button>
+    <button class="primary-button publish" :class="{ 'publish--disabled': store.user.isLoggedIn && !canPublish }" :loading="publishing" :disabled="publishing" @tap="publish">{{ !store.user.isLoggedIn ? '登录后收藏这一刻' : (publishing ? '正在收藏…' : '收藏这一刻') }}</button>
     <text class="privacy-note"><AppIcon name="lock" :size="13" />你的私密记录不会出现在 TA 的报告里</text>
   </view>
 </template>

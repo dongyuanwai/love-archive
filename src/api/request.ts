@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/config/env'
-import { redirectToLogin } from '@/utils/auth-navigation'
+import { redirectToLogin, shouldAutoRedirectToLogin } from '@/utils/auth-navigation'
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from './token'
 
 type HttpMethod = NonNullable<UniApp.RequestOptions['method']>
@@ -63,7 +63,7 @@ export async function apiRequest<T>({
   const accessToken = getAccessToken()
 
   if (auth && !accessToken) {
-    redirectToLogin()
+    if (shouldAutoRedirectToLogin()) redirectToLogin()
     throw new ApiError('请先登录', 401)
   }
 
@@ -90,7 +90,7 @@ export async function apiRequest<T>({
         return apiRequest<T>({ path, method, data, auth }, true)
       }
       clearTokens()
-      redirectToLogin()
+      if (shouldAutoRedirectToLogin()) redirectToLogin()
     }
 
     throw new ApiError(

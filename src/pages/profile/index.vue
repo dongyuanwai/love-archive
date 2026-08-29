@@ -9,8 +9,6 @@ import { logoutWechat } from '@/api/auth'
 import { syncTabBarSelection } from '@/utils/tab-bar'
 
 const store = useArchiveStore()
-const redirectingToLogin = ref(false)
-const loginPrompted = ref(false)
 const nicknameEditorVisible = ref(false)
 const nicknameDraft = ref('')
 const profileSaving = ref(false)
@@ -23,7 +21,6 @@ const canManageSuggestions = ref(false)
 onShow(async () => {
   syncTabBarSelection()
   if (store.user.isLoggedIn) {
-    loginPrompted.value = false
     profileLoading.value = true
     try {
       const [profile, relationship] = await Promise.all([
@@ -43,24 +40,14 @@ onShow(async () => {
     return
   }
   profileLoading.value = false
-  if (loginPrompted.value) {
-    loginPrompted.value = false
-    uni.switchTab({ url: '/pages/index/index' })
-    return
-  }
-  if (redirectingToLogin.value) return
-  redirectingToLogin.value = true
-  loginPrompted.value = true
-  uni.navigateTo({
-    url: '/pages/login/index?target=profile',
-    complete: () => { redirectingToLogin.value = false },
-  })
+  profileReady.value = false
 })
 
 const openItem = (item: { path: string }) => uni.navigateTo({ url: item.path })
 const goBinding = () => uni.navigateTo({ url: '/pages/binding/index' })
 const goSuggestion = () => openItem({ path: '/pages/suggestion/index' })
 const goSuggestionManagement = () => openItem({ path: '/pages/suggestion/list' })
+const goLogin = () => uni.navigateTo({ url: '/pages/login/index?target=profile' })
 
 const openNicknameEditor = () => {
   nicknameDraft.value = store.user.name
@@ -162,6 +149,7 @@ const logout = () => {
           <view class="login-badge">已登录</view>
           <button class="edit-nickname" @tap="openNicknameEditor">修改昵称</button>
         </view>
+        <button v-else class="login-action" @tap="goLogin">微信登录</button>
       </view>
 
       <view class="relationship card" @tap="goBinding">
@@ -218,6 +206,7 @@ const logout = () => {
 <style scoped lang="scss">
 .profile-page { padding-bottom: calc(108rpx + env(safe-area-inset-bottom)); }
 .profile-head { padding: 12rpx 2rpx 38rpx; }.profile-head__title{display:block;margin-top:18rpx;font-size:46rpx;font-weight:750}
+.login-action{display:flex;min-height:64rpx;margin-left:14rpx;padding:0 22rpx;align-items:center;justify-content:center;border-radius:20rpx;background:#fff0e8;color:#a45d52;font-size:22rpx;font-weight:700;line-height:1}
 .identity,.relationship,.menu-row{display:flex;align-items:center}.identity{padding:26rpx}.identity__avatar{display:flex;width:92rpx;height:92rpx;flex:none;align-items:center;justify-content:center;border-radius:31rpx;background:linear-gradient(145deg,#f9c9a7,#efa989);color:#784a3e;font-size:33rpx;font-weight:750}.identity__avatar--image{display:block;background:#f5ebe5}.identity__copy{min-width:0;flex:1;margin-left:20rpx}.identity__name,.identity__desc{display:block}.identity__name{font-size:31rpx;font-weight:750}.identity__desc{margin-top:7rpx;color:#958682;font-size:22rpx}.login-badge{padding:8rpx 14rpx;border-radius:999rpx;background:#edf7ef;color:#4f8760;font-size:19rpx;font-weight:650}
 .identity__actions{display:flex;flex:none;gap:9rpx;align-items:flex-end;flex-direction:column}.edit-nickname{min-height:44rpx;padding:0 10rpx;background:transparent;color:#a35e52;font-size:20rpx;line-height:44rpx}
 .relationship{margin-top:20rpx;padding:27rpx;background:linear-gradient(135deg,#fff,#fff1e7)}.relationship__avatars{display:flex;width:104rpx}.relationship__avatars>view,.relationship__empty{display:flex;width:67rpx;height:67rpx;overflow:hidden;align-items:center;justify-content:center;border:4rpx solid #fff;border-radius:50%;background:#f4b692;color:#7a493c;font-weight:700}.relationship__avatars>view+view{margin-left:-25rpx;background:#c8dae8;color:#526b82}.relationship__avatar-image{display:block;width:100%;height:100%;border-radius:inherit}.relationship__empty{border:0;background:#fff0e5;color:#a35e52}.relationship__copy{flex:1;margin-left:17rpx}.relationship__label,.relationship__title,.relationship__desc{display:block}.relationship__label{color:#a56a5f;font-size:19rpx;font-weight:700}.relationship__title{margin-top:6rpx;font-size:28rpx;font-weight:750}.relationship__desc{margin-top:6rpx;color:#968682;font-size:20rpx}
