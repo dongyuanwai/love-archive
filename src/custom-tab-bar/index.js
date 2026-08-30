@@ -1,6 +1,7 @@
 Component({
   data: {
     selected: 0,
+    createMenuVisible: false,
     color: '#8B7E7A',
     selectedColor: '#D87263',
     list: [
@@ -39,6 +40,9 @@ Component({
     show() {
       this.syncSelected()
     },
+    hide() {
+      this.setData({ createMenuVisible: false })
+    },
   },
   methods: {
     syncSelected() {
@@ -54,11 +58,30 @@ Component({
 
       if (index === this.data.selected) return
 
-      this.setData({ selected: index })
+      this.setData({ selected: index, createMenuVisible: false })
       wx.switchTab({
         url: item.pagePath,
         fail: () => this.syncSelected(),
       })
+    },
+    openCreateMenu() {
+      this.setData({ createMenuVisible: true })
+    },
+    toggleCreateMenu() {
+      this.setData({ createMenuVisible: !this.data.createMenuVisible })
+    },
+    closeCreateMenu() {
+      this.setData({ createMenuVisible: false })
+    },
+    keepCreateMenuOpen() {},
+    chooseCreateType(event) {
+      const target = event.currentTarget.dataset.target
+      const url = target === 'anniversary'
+        ? '/pages/anniversary/edit'
+        : '/pages/create/index'
+
+      this.setData({ createMenuVisible: false })
+      wx.navigateTo({ url })
     },
   },
 })

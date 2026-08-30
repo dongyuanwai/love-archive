@@ -1,19 +1,94 @@
-<view class="tab-bar">
-  <view
-    wx:for="{{list}}"
-    wx:key="pagePath"
-    class="tab-bar__item"
-    data-index="{{index}}"
-    bindtap="switchTab"
-  >
-    <image
-      class="tab-bar__icon"
-      src="{{selected === index ? item.selectedIconPath : item.iconPath}}"
-      mode="aspectFit"
-    />
-    <text
-      class="tab-bar__text"
-      style="color: {{selected === index ? selectedColor : color}}"
-    >{{item.text}}</text>
+<view
+  wx:if="{{createMenuVisible}}"
+  class="create-menu__mask"
+  aria-hidden="true"
+  bindtap="closeCreateMenu"
+></view>
+
+<view
+  wx:if="{{createMenuVisible}}"
+  class="create-menu"
+  catchtap="keepCreateMenuOpen"
+>
+  <view class="create-menu__head">
+    <view>
+      <text class="create-menu__title">想记录什么？</text>
+      <text class="create-menu__desc">把此刻的心情，或重要的日子收藏下来</text>
+    </view>
+    <view
+      class="create-menu__close"
+      aria-role="button"
+      aria-label="关闭添加菜单"
+      hover-class="create-menu__close--pressed"
+      bindtap="closeCreateMenu"
+    >
+      <view class="create-menu__close-line create-menu__close-line--left"></view>
+      <view class="create-menu__close-line create-menu__close-line--right"></view>
+    </view>
   </view>
+
+  <view class="create-menu__options">
+    <view
+      class="create-menu__option create-menu__option--mood"
+      data-target="mood"
+      aria-role="button"
+      aria-label="记录心情"
+      hover-class="create-menu__option--pressed"
+      bindtap="chooseCreateType"
+    >
+      <view class="create-menu__option-icon">
+        <image src="/static/icons/tabbar/archive-active.png" mode="aspectFit" />
+      </view>
+      <text class="create-menu__option-title">记录心情</text>
+      <text class="create-menu__option-desc">写下此刻的开心或难过</text>
+    </view>
+
+    <view
+      class="create-menu__option create-menu__option--anniversary"
+      data-target="anniversary"
+      aria-role="button"
+      aria-label="添加重要日子"
+      hover-class="create-menu__option--pressed"
+      bindtap="chooseCreateType"
+    >
+      <view class="create-menu__option-icon">
+        <image src="/static/icons/tabbar/create-active.png" mode="aspectFit" />
+      </view>
+      <text class="create-menu__option-title">添加重要日子</text>
+      <text class="create-menu__option-desc">记住纪念日、生日和相遇</text>
+    </view>
+  </view>
+</view>
+
+<view class="tab-bar">
+  <block wx:for="{{list}}" wx:key="pagePath">
+    <view
+      class="tab-bar__item"
+      data-index="{{index}}"
+      bindtap="switchTab"
+    >
+      <image
+        class="tab-bar__icon"
+        src="{{selected === index ? item.selectedIconPath : item.iconPath}}"
+        mode="aspectFit"
+      />
+      <text
+        class="tab-bar__text"
+        style="color: {{selected === index ? selectedColor : color}}"
+      >{{item.text}}</text>
+    </view>
+
+    <view
+      wx:if="{{index === 1}}"
+      class="tab-bar__create"
+      aria-role="button"
+      aria-label="添加记录"
+      hover-class="none"
+      bindtap="toggleCreateMenu"
+    >
+      <view class="tab-bar__create-button {{createMenuVisible ? 'tab-bar__create-button--open' : ''}}">
+        <view class="tab-bar__create-plus"></view>
+      </view>
+    </view>
+  </block>
 </view>

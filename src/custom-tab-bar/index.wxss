@@ -32,3 +32,228 @@
   font-size: 20rpx;
   line-height: 26rpx;
 }
+
+.tab-bar__create {
+  position: relative;
+  display: flex;
+  height: 108rpx;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.tab-bar__create-button {
+  position: absolute;
+  top: -36rpx;
+  left: 50%;
+  display: flex;
+  width: 112rpx;
+  height: 112rpx;
+  align-items: center;
+  justify-content: center;
+  border: 8rpx solid #fffcf8;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #e48677 0%, #cb6258 100%);
+  box-shadow: 0 12rpx 28rpx rgba(161, 76, 67, 0.28);
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.tab-bar__create-button--open {
+  background: linear-gradient(145deg, #d46f62 0%, #b9544c 100%);
+  box-shadow: 0 8rpx 20rpx rgba(142, 65, 57, 0.24);
+}
+
+.tab-bar__create-plus,
+.tab-bar__create-plus::after {
+  display: block;
+  width: 44rpx;
+  height: 6rpx;
+  border-radius: 999rpx;
+  background: #ffffff;
+  content: '';
+}
+
+.tab-bar__create-plus::after {
+  transform: rotate(90deg);
+}
+
+.create-menu__mask {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1001;
+  background: rgba(57, 40, 37, 0.28);
+  animation: create-mask-in 180ms ease-out;
+}
+
+.create-menu {
+  position: fixed;
+  right: 24rpx;
+  bottom: calc(126rpx + env(safe-area-inset-bottom));
+  left: 24rpx;
+  z-index: 1002;
+  padding: 30rpx 28rpx 28rpx;
+  border: 1rpx solid rgba(226, 186, 177, 0.7);
+  border-radius: 34rpx;
+  background: rgba(255, 252, 249, 0.98);
+  box-shadow: 0 24rpx 64rpx rgba(92, 57, 49, 0.2);
+  box-sizing: border-box;
+  animation: create-sheet-in 200ms ease-out;
+}
+
+.create-menu__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.create-menu__title,
+.create-menu__desc,
+.create-menu__option-title,
+.create-menu__option-desc {
+  display: block;
+}
+
+.create-menu__title {
+  color: #433633;
+  font-size: 31rpx;
+  font-weight: 700;
+  line-height: 42rpx;
+}
+
+.create-menu__desc {
+  margin-top: 5rpx;
+  color: #8c7b77;
+  font-size: 21rpx;
+  line-height: 32rpx;
+}
+
+.create-menu__close {
+  position: relative;
+  display: flex;
+  width: 56rpx;
+  height: 56rpx;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  margin-left: 18rpx;
+  border-radius: 50%;
+  background: #f6ece8;
+}
+
+.create-menu__close--pressed {
+  background: #eddad4;
+}
+
+.create-menu__close-line {
+  position: absolute;
+  width: 23rpx;
+  height: 3rpx;
+  border-radius: 999rpx;
+  background: #9c7770;
+}
+
+.create-menu__close-line--left {
+  transform: rotate(45deg);
+}
+
+.create-menu__close-line--right {
+  transform: rotate(-45deg);
+}
+
+.create-menu__options {
+  display: flex;
+  gap: 18rpx;
+  margin-top: 26rpx;
+}
+
+.create-menu__option {
+  display: flex;
+  min-width: 0;
+  min-height: 190rpx;
+  flex: 1;
+  padding: 24rpx 22rpx 22rpx;
+  align-items: flex-start;
+  justify-content: center;
+  border: 1rpx solid transparent;
+  border-radius: 26rpx;
+  flex-direction: column;
+  box-sizing: border-box;
+  transition: opacity 160ms ease, background-color 160ms ease;
+}
+
+.create-menu__option--mood {
+  border-color: #f1d6ce;
+  background: #fff3ef;
+}
+
+.create-menu__option--anniversary {
+  border-color: #eadfd2;
+  background: #fff8ef;
+}
+
+.create-menu__option--pressed {
+  opacity: 0.72;
+}
+
+.create-menu__option-icon {
+  display: flex;
+  width: 66rpx;
+  height: 66rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 21rpx;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.create-menu__option-icon image {
+  display: block;
+  width: 42rpx;
+  height: 42rpx;
+}
+
+.create-menu__option-title {
+  margin-top: 18rpx;
+  color: #56423e;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 36rpx;
+}
+
+.create-menu__option-desc {
+  margin-top: 5rpx;
+  color: #8f7b76;
+  font-size: 19rpx;
+  line-height: 29rpx;
+}
+
+@keyframes create-mask-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes create-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .create-menu,
+  .create-menu__mask,
+  .tab-bar__create-button,
+  .create-menu__option {
+    animation: none;
+    transition: none;
+  }
+}

@@ -313,7 +313,9 @@ watch(filter, (value) => {
           :hover-start-time="20"
           @tap="goAddAnniversary"
         >
-          <view class="special-days-heading__add-icon"><AppIcon name="plus" :size="13" /></view>
+          <view class="special-days-heading__add-icon" aria-hidden="true">
+            <view class="inline-plus inline-plus--small" />
+          </view>
           <text class="special-days-heading__add-text">添加</text>
         </view>
       </view>
@@ -395,7 +397,9 @@ watch(filter, (value) => {
         @tap="goCreate"
       >
         <view class="quick-add__content">
-          <view class="quick-add__icon"><AppIcon name="plus" :size="17" /></view>
+          <view class="quick-add__icon" aria-hidden="true">
+            <view class="inline-plus inline-plus--regular" />
+          </view>
           <text class="quick-add__text">记录</text>
         </view>
       </view>
@@ -487,6 +491,11 @@ watch(filter, (value) => {
 .special-days-heading__add { display: flex; min-width: 108rpx; height: 60rpx; gap: 4rpx; padding: 0 16rpx; align-items: center; justify-content: center; border: 1rpx solid #eacbc4; border-radius: 20rpx; background: #fff7f3; color: #a65349; font-size: 21rpx; font-weight: 700; line-height: 1; }
 .special-days-heading__add-icon { display: flex; width: 28rpx; height: 28rpx; flex: none; align-items: center; justify-content: center; font-size: 0; line-height: 0; }
 .special-days-heading__add-text { display: block; height: 28rpx; line-height: 28rpx; }
+.inline-plus { position: relative; display: block; flex: none; color: inherit; }
+.inline-plus::before,.inline-plus::after { position: absolute; top: 50%; left: 50%; width: 100%; height: 3rpx; border-radius: 999rpx; background: currentColor; content: ''; transform: translate(-50%,-50%); }
+.inline-plus::after { transform: translate(-50%,-50%) rotate(90deg); }
+.inline-plus--small { width: 18rpx; height: 18rpx; }
+.inline-plus--regular { width: 24rpx; height: 24rpx; }
 .special-days-heading__more { display: flex; height: 48rpx; gap: 1rpx; padding: 0 0 0 12rpx; align-items: center; justify-content: center; background: transparent; color: #9c6a62; font-size: 20rpx; font-weight: 650; line-height: 1; }
 .heading-action--pressed { opacity: .62; }
 .special-day-card { position: relative; overflow: hidden; margin-top: 17rpx; padding: 27rpx 27rpx 25rpx; border-color: #edd3cc; background: linear-gradient(145deg,#fffdfa 0%,#fff2ed 100%); box-shadow: 0 12rpx 34rpx rgba(132,79,67,.09); }

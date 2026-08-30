@@ -19,6 +19,7 @@ interface DraftImage {
 }
 
 const maxMoodImages = 3
+const maxMoodImageBytes = 3 * 1024 * 1024
 
 const store = useArchiveStore()
 const mood = ref<MoodKind>('happy')
@@ -52,7 +53,7 @@ const imageHint = computed(() => {
   if (publishStage.value === 'uploading') return `正在上传第 ${uploadingNumber.value} 张照片…`
   if (draftImages.value.some((image) => image.status === 'failed')) return '有照片上传失败，再次发布会从这里继续'
   if (draftImages.value.length && draftImages.value.every((image) => image.status === 'uploaded')) return '照片已上传，发布失败也无需重复上传'
-  return '最多 3 张'
+  return '最多 3 张，单张不超过 3MB'
 })
 const publishLabel = computed(() => {
   if (!store.user.isLoggedIn) return '登录后收藏这一刻'
@@ -85,6 +86,14 @@ const compressImage = (src: string) => new Promise<string>((resolve) => {
   })
 })
 
+const getFileSize = (filePath: string) => new Promise<number>((resolve, reject) => {
+  uni.getFileSystemManager().getFileInfo({
+    filePath,
+    success: (result) => resolve(result.size),
+    fail: () => reject(new Error('暂时无法读取照片大小，请重试')),
+  })
+})
+
 const chooseImages = async () => {
   if (selectingImages.value || publishing.value || remainingImageCount.value <= 0) return
 
@@ -105,18 +114,30 @@ const chooseImages = async () => {
       filePath: file.tempFilePath,
       status: 'compressing',
     }))
-    draftImages.value.push(...selected)
-
-    await Promise.all(selected.map(async (image) => {
-      image.filePath = await compressImage(image.filePath)
-      image.status = 'ready'
+    const processed = await Promise.all(selected.map(async (image) => {
+      const filePath = await compressImage(image.filePath)
+      const size = await getFileSize(filePath)
+      return { ...image, filePath, size, status: 'ready' as const }
     }))
+    const accepted = processed.filter((image) => image.size <= maxMoodImageBytes)
+    const oversizedCount = processed.length - accepted.length
+    draftImages.value.push(...accepted)
+    if (oversizedCount > 0) {
+      uni.showToast({
+        title: oversizedCount === 1 ? '照片超过 3MB，已忽略' : oversizedCount + ' 张照片超过 3MB，已忽略',
+        icon: 'none',
+        duration: 2500,
+      })
+    }
   } catch (error) {
     const message = error && typeof error === 'object' && 'errMsg' in error
       ? String((error as { errMsg?: string }).errMsg || '')
       : ''
     if (!message.toLowerCase().includes('cancel')) {
-      uni.showToast({ title: '暂时无法选择照片，请重试', icon: 'none' })
+      uni.showToast({
+        title: error instanceof Error ? error.message : '暂时无法选择照片，请重试',
+        icon: 'none',
+      })
     }
   } finally {
     selectingImages.value = false

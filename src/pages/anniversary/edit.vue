@@ -35,7 +35,18 @@ const lunarYears = Array.from({ length: 201 }, (_, index) => 1900 + index)
 const lunarMonthNames = ['正月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '冬月', '腊月']
 const lunarDayNames = ['初一', '初二', '初三', '初四', '初五', '初六', '初七', '初八', '初九', '初十', '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十', '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十']
 
-const kinds = (Object.keys(anniversaryKindLabels) as AnniversaryKind[]).map((value) => ({ value, label: anniversaryKindLabels[value] }))
+const kindIconNames: Record<AnniversaryKind, string> = {
+  relationship: 'relationship',
+  birthday: 'birthday',
+  first_met: 'first-met',
+  custom: 'custom',
+}
+const kinds = (Object.keys(anniversaryKindLabels) as AnniversaryKind[]).map((value) => ({
+  value,
+  label: anniversaryKindLabels[value],
+  iconPath: '/static/icons/anniversary-kinds/' + kindIconNames[value] + '.png',
+  activeIconPath: '/static/icons/anniversary-kinds/' + kindIconNames[value] + '-active.png',
+}))
 const calendarOptions = [{ label: '公历', value: 'solar' }, { label: '农历', value: 'lunar' }]
 const repeatOptions = [{ label: '每年重复', value: 'yearly' }, { label: '仅这一次', value: 'once' }]
 const reminderOptions = [
@@ -260,7 +271,9 @@ const remove = () => {
         <text class="field__label">它是什么日子？</text>
         <view class="kind-grid">
           <view v-for="item in kinds" :key="item.value" class="kind-option" :class="{ active: kind === item.value }" role="button" @tap="chooseKind(item.value)">
-            <view class="kind-option__icon"><AppIcon :name="item.value === 'relationship' ? 'heart' : 'calendar'" :size="19" :filled="item.value === 'relationship'" /></view>
+            <view class="kind-option__icon" aria-hidden="true">
+              <image :src="kind === item.value ? item.activeIconPath : item.iconPath" mode="aspectFit" />
+            </view>
             <text>{{ item.label }}</text>
           </view>
         </view>
@@ -358,7 +371,8 @@ const remove = () => {
 .kind-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14rpx; margin-top: 18rpx; }
 .kind-option { display: flex; height: 78rpx; gap: 10rpx; align-items: center; justify-content: flex-start; padding: 0 18rpx; border: 1rpx solid #eaded8; border-radius: 21rpx; background: #fffcfa; color: #766864; font-size: 23rpx; line-height: 1; }
 .kind-option.active { border-color: #dfa99e; background: #fff0ea; color: #a65349; font-weight: 700; }
-.kind-option__icon { display: flex; width: 34rpx; height: 34rpx; align-items: center; justify-content: center; }
+.kind-option__icon { display: flex; width: 42rpx; height: 42rpx; flex: none; align-items: center; justify-content: center; }
+.kind-option__icon image { display: block; width: 40rpx; height: 40rpx; }
 .date-picker { display: flex; min-width: 250rpx; height: 70rpx; gap: 9rpx; padding: 0 15rpx; align-items: center; justify-content: flex-end; border-radius: 20rpx; background: #fff5f1; color: #76534d; font-size: 23rpx; line-height: 1; }
 .date-picker--lunar { min-width: 290rpx; }
 .date-picker__icon { display: flex; width: 34rpx; height: 34rpx; flex: none; align-items: center; justify-content: center; font-size: 0; line-height: 1; }
