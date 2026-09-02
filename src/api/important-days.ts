@@ -65,6 +65,27 @@ export interface ImportantDayPage {
   pagination: ImportantDayListResponse['pagination']
 }
 
+export interface ImportantDayReminderConfig {
+  enabled: boolean
+  templateId: string | null
+  subscriptionType: 'one_time'
+  sendTime: string
+  timeZone: string
+}
+
+export interface ImportantDayWechatReminder {
+  status: 'not_enabled' | 'pending' | 'sent' | 'failed' | 'cancelled'
+  enabled: boolean
+  daysBefore: number
+  occurrenceDate: string
+  scheduledAt: string | null
+  sentAt: string | null
+  sendTime: string
+  subscriptionType: 'one_time'
+  needsAuthorization: boolean
+  failureReason: string
+}
+
 const requestKinds: Record<AnniversaryKind, string> = {
   relationship: 'ANNIVERSARY',
   birthday: 'BIRTHDAY',
@@ -163,4 +184,30 @@ export async function updateImportantDay(id: string, draft: ImportantDayDraft): 
 
 export function deleteImportantDay(id: string): Promise<{ success: boolean }> {
   return apiRequest<{ success: boolean }>({ path: `/important-days/${id}`, method: 'DELETE' })
+}
+
+export function getImportantDayReminderConfig(): Promise<ImportantDayReminderConfig> {
+  return apiRequest<ImportantDayReminderConfig>({ path: '/important-days/reminder-config' })
+}
+
+export function getImportantDayWechatReminder(id: string): Promise<ImportantDayWechatReminder> {
+  return apiRequest<ImportantDayWechatReminder>({ path: `/important-days/${id}/wechat-reminder` })
+}
+
+export function saveImportantDayWechatReminder(
+  id: string,
+  data: { daysBefore: number; authorizationAccepted?: boolean },
+): Promise<ImportantDayWechatReminder> {
+  return apiRequest<ImportantDayWechatReminder>({
+    path: `/important-days/${id}/wechat-reminder`,
+    method: 'PUT',
+    data,
+  })
+}
+
+export function disableImportantDayWechatReminder(id: string): Promise<ImportantDayWechatReminder> {
+  return apiRequest<ImportantDayWechatReminder>({
+    path: `/important-days/${id}/wechat-reminder`,
+    method: 'DELETE',
+  })
 }

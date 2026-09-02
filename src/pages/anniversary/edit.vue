@@ -4,6 +4,14 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { Lunar, LunarYear, Solar } from 'lunar-javascript'
 import AppIcon from '@/components/AppIcon.vue'
 import SegmentControl from '@/components/SegmentControl.vue'
+import {
+  disableImportantDayWechatReminder,
+  getImportantDayReminderConfig,
+  getImportantDayWechatReminder,
+  saveImportantDayWechatReminder,
+  type ImportantDayReminderConfig,
+  type ImportantDayWechatReminder,
+} from '@/api/important-days'
 import { useAnniversaryStore, type AnniversaryDraft } from '@/stores/anniversary'
 import { useArchiveStore } from '@/stores/archive'
 import type { Anniversary, AnniversaryKind, AnniversaryRepeat, CalendarType, Visibility } from '@/types/domain'
@@ -20,7 +28,14 @@ const calendarType = ref<CalendarType>('solar')
 const repeat = ref<AnniversaryRepeat>('yearly')
 const visibility = ref<Visibility>('private')
 const note = ref('')
-const reminderDaysBefore = ref<number[]>([0])
+const editingItem = ref<Anniversary | null>(null)
+const reminderConfig = ref<ImportantDayReminderConfig | null>(null)
+const wechatReminder = ref<ImportantDayWechatReminder | null>(null)
+const wechatReminderDaysBefore = ref(1)
+const reminderConfigLoading = ref(false)
+const reminderLoading = ref(false)
+const reminderSaving = ref(false)
+const reminderEnabledForNew = ref(false)
 const initialLoading = ref(false)
 const loadError = ref('')
 const saving = ref(false)
@@ -60,7 +75,39 @@ const visibilityOptions = computed(() => [
   { label: '仅自己', value: 'private' },
 ])
 const isEditing = computed(() => Boolean(id.value))
+const canEditDay = computed(() => !editingItem.value?.creatorId || editingItem.value.creatorId === archiveStore.user.id)
 const canSave = computed(() => Boolean(title.value.trim() && date.value && !saving.value && !initialLoading.value))
+const hasPendingWechatReminder = computed(() => wechatReminder.value?.status === 'pending')
+const wechatReminderSwitchChecked = computed(() => isEditing.value ? hasPendingWechatReminder.value : reminderEnabledForNew.value)
+const wechatReminderSendTime = computed(() => reminderConfig.value?.sendTime || wechatReminder.value?.sendTime || '09:00')
+const reminderStatusLabel = computed(() => {
+  if (reminderLoading.value) return '读取中'
+  if (reminderSaving.value) return '处理中'
+  if (!isEditing.value && reminderEnabledForNew.value) return '收藏时开启'
+  if (hasPendingWechatReminder.value) return '下次提醒已开启'
+  if (wechatReminder.value?.status === 'sent') return '本次已提醒'
+  if (wechatReminder.value?.status === 'failed') return '需要重新开启'
+  return '一次性订阅'
+})
+const reminderStatusText = computed(() => {
+  if (!archiveStore.user.isLoggedIn) return '登录后可以为下一次重要日子开启微信提醒。'
+  if (reminderConfigLoading.value || reminderLoading.value) return '正在读取微信提醒状态……'
+  if (!reminderConfig.value?.enabled) return '微信服务通知暂未配置，请稍后再试。'
+  if (!isEditing.value && reminderEnabledForNew.value) return '点击收藏后，将申请微信授权并开启下一次提醒。'
+  if (hasPendingWechatReminder.value) {
+    const option = reminderOptions.find((item) => item.value === wechatReminderDaysBefore.value)
+    return `${option?.label || '提前 1 天'}的 ${wechatReminderSendTime.value}，将通过微信服务通知提醒你。`
+  }
+  if (wechatReminder.value?.status === 'sent') return '这次授权已经使用，下一个重要日子到来前需要再次开启。'
+  if (wechatReminder.value?.status === 'failed') return wechatReminder.value.failureReason || '上次提醒未能发出，请重新开启。'
+  return '每次授权对应下一次提醒；双方可见的日子，也需要两个人分别开启。'
+})
+const reminderSwitchDisabled = computed(() =>
+  reminderConfigLoading.value ||
+  reminderLoading.value ||
+  reminderSaving.value ||
+  saving.value ||
+  (archiveStore.user.isLoggedIn && !reminderConfig.value?.enabled))
 const lunarMonths = computed(() => {
   const leapMonth = LunarYear.fromYear(lunarYear.value).getLeapMonth()
   return Array.from({ length: 12 }, (_, index) => index + 1).flatMap((month) => [
@@ -86,6 +133,7 @@ const lunarDateLabel = computed(() => {
 
 onLoad((query) => { id.value = String(query?.id || '') })
 const applyItem = (item: Anniversary) => {
+  editingItem.value = item
   title.value = item.title
   date.value = item.date
   kind.value = item.kind
@@ -98,7 +146,31 @@ const applyItem = (item: Anniversary) => {
   repeat.value = item.repeat
   visibility.value = archiveStore.activeRelationship ? item.visibility : 'private'
   note.value = item.note
-  reminderDaysBefore.value = item.reminderDaysBefore?.length ? [...item.reminderDaysBefore] : [0]
+  wechatReminderDaysBefore.value = item.reminderDaysBefore?.[0] ?? 1
+}
+const loadReminderConfig = async () => {
+  if (!archiveStore.user.isLoggedIn || reminderConfigLoading.value) return
+  reminderConfigLoading.value = true
+  try {
+    reminderConfig.value = await getImportantDayReminderConfig()
+  } catch {
+    reminderConfig.value = null
+  } finally {
+    reminderConfigLoading.value = false
+  }
+}
+const loadWechatReminder = async () => {
+  if (!id.value || !archiveStore.user.isLoggedIn || reminderLoading.value) return
+  reminderLoading.value = true
+  try {
+    wechatReminder.value = await getImportantDayWechatReminder(id.value)
+    wechatReminderDaysBefore.value = wechatReminder.value.daysBefore
+    reminderEnabledForNew.value = wechatReminder.value.status === 'pending'
+  } catch {
+    wechatReminder.value = null
+  } finally {
+    reminderLoading.value = false
+  }
 }
 const loadEditingItem = async () => {
   if (!id.value) return
@@ -109,6 +181,7 @@ const loadEditingItem = async () => {
   loadError.value = ''
   try {
     applyItem(await anniversaryStore.loadDetail(id.value))
+    await loadWechatReminder()
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : '重要日子加载失败'
   } finally {
@@ -116,7 +189,9 @@ const loadEditingItem = async () => {
   }
 }
 onShow(() => {
+  if (reminderSaving.value || saving.value) return
   if (!archiveStore.activeRelationship) visibility.value = 'private'
+  if (archiveStore.user.isLoggedIn) void loadReminderConfig()
   if (!id.value) {
     if (archiveStore.activeRelationship) visibility.value = 'partner'
     return
@@ -165,30 +240,19 @@ const onLunarChange = (event: { detail: { value: number[] } }) => {
   lunarDay.value = Math.min(dayIndex + 1, lunarDayCount.value)
   syncSolarDateFromLunar()
 }
-const toggleReminder = (value: number) => {
-  if (reminderDaysBefore.value.includes(value)) {
-    if (reminderDaysBefore.value.length === 1) {
-      uni.showToast({ title: '请至少保留一个提醒日期', icon: 'none' })
-      return
-    }
-    reminderDaysBefore.value = reminderDaysBefore.value.filter((item) => item !== value)
-    return
-  }
-  reminderDaysBefore.value = [...reminderDaysBefore.value, value].sort((a, b) => a - b)
+const chooseWechatReminder = (value: number) => {
+  if (reminderSwitchDisabled.value) return
+  wechatReminderDaysBefore.value = value
+  if (id.value && hasPendingWechatReminder.value) void enableWechatReminder()
 }
 
-const save = async () => {
-  if (saving.value) return
-  if (!archiveStore.user.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/login/index?target=anniversaryEdit&back=1' })
-    return
-  }
+const buildDraft = () => {
   const normalizedTitle = title.value.trim()
   if (!normalizedTitle) {
     uni.showToast({ title: '请填写日子名称', icon: 'none' })
-    return
+    return null
   }
-  const draft: AnniversaryDraft = {
+  return {
     title: normalizedTitle,
     date: date.value,
     kind: kind.value,
@@ -200,19 +264,148 @@ const save = async () => {
     lunarMonth: calendarType.value === 'lunar' ? Math.abs(lunarMonth.value) : undefined,
     lunarDay: calendarType.value === 'lunar' ? lunarDay.value : undefined,
     isLeapMonth: calendarType.value === 'lunar' ? lunarMonth.value < 0 : undefined,
-    reminderDaysBefore: [...reminderDaysBefore.value],
+    // 后端暂时保留这个兼容字段；实际提醒只使用微信服务通知的单选配置。
+    reminderDaysBefore: [wechatReminderDaysBefore.value],
+  } satisfies AnniversaryDraft
+}
+
+const persistDay = async (draft: AnniversaryDraft) => {
+  const item = isEditing.value
+    ? await anniversaryStore.update(id.value, draft)
+    : await anniversaryStore.create(draft)
+  id.value = item.id
+  editingItem.value = item
+  return item
+}
+
+const requestWechatReminderAuthorization = (templateId: string) => new Promise<string>((resolve, reject) => {
+  // #ifdef MP-WEIXIN
+  uni.requestSubscribeMessage({
+    tmplIds: [templateId],
+    success: (result) => {
+      const values = result as unknown as Record<string, string>
+      resolve(values[templateId] || 'reject')
+    },
+    fail: (error) => reject(new Error(error.errMsg || '无法打开微信订阅授权')),
+  })
+  return
+  // #endif
+  // #ifndef MP-WEIXIN
+  reject(new Error('请在微信小程序中开启服务通知'))
+  // #endif
+})
+
+const save = async () => {
+  if (saving.value) return
+  if (!archiveStore.user.isLoggedIn) {
+    uni.navigateTo({ url: '/pages/login/index?target=anniversaryEdit&back=1' })
+    return
+  }
+  const draft = buildDraft()
+  if (!draft) return
+  const wasEditing = isEditing.value
+  const shouldEnableReminder = !wasEditing && reminderEnabledForNew.value
+  let authorizationAccepted = false
+  let authorizationMessage = ''
+  if (shouldEnableReminder) {
+    const config = reminderConfig.value
+    if (!config?.enabled || !config.templateId) {
+      uni.showToast({ title: '微信提醒暂不可用', icon: 'none' })
+      return
+    }
+    try {
+      const result = await requestWechatReminderAuthorization(config.templateId)
+      authorizationAccepted = result === 'accept'
+      if (!authorizationAccepted) authorizationMessage = '你暂未同意微信提醒授权'
+    } catch (error) {
+      authorizationMessage = error instanceof Error ? error.message : '微信提醒授权失败'
+    }
   }
   saving.value = true
   try {
-    if (isEditing.value) await anniversaryStore.update(id.value, draft)
-    else await anniversaryStore.create(draft)
-    uni.showToast({ title: isEditing.value ? '已保存修改' : '重要日子已收藏', icon: 'success' })
-    setTimeout(() => uni.navigateBack(), 350)
+    const item = await persistDay(draft)
+    if (shouldEnableReminder && authorizationAccepted) {
+      try {
+        wechatReminder.value = await saveImportantDayWechatReminder(item.id, {
+          daysBefore: wechatReminderDaysBefore.value,
+          authorizationAccepted: true,
+        })
+        uni.showToast({ title: '已收藏并开启提醒', icon: 'success' })
+      } catch (error) {
+        uni.showToast({ title: error instanceof Error ? `已收藏，${error.message}` : '已收藏，提醒开启失败', icon: 'none' })
+      }
+    } else if (shouldEnableReminder) {
+      uni.showToast({ title: authorizationMessage || '已收藏，提醒未开启', icon: 'none' })
+    } else {
+      uni.showToast({ title: wasEditing ? '已保存修改' : '重要日子已收藏', icon: 'success' })
+    }
+    setTimeout(() => uni.navigateBack(), shouldEnableReminder ? 700 : 350)
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : '保存失败，请稍后重试', icon: 'none' })
   } finally {
     saving.value = false
   }
+}
+
+const enableWechatReminder = async () => {
+  if (reminderSwitchDisabled.value || !id.value) return
+  if (!archiveStore.user.isLoggedIn) {
+    uni.navigateTo({ url: '/pages/login/index?target=anniversaryEdit&back=1' })
+    return
+  }
+  const config = reminderConfig.value
+  if (!config?.enabled || !config.templateId) {
+    uni.showToast({ title: '微信提醒暂不可用', icon: 'none' })
+    return
+  }
+  reminderSaving.value = true
+  const wasPending = hasPendingWechatReminder.value
+  try {
+    if (!wasPending) {
+      const result = await requestWechatReminderAuthorization(config.templateId)
+      if (result !== 'accept') {
+        uni.showToast({ title: '你暂未同意微信提醒授权', icon: 'none' })
+        return
+      }
+    }
+    wechatReminder.value = await saveImportantDayWechatReminder(id.value, {
+      daysBefore: wechatReminderDaysBefore.value,
+      authorizationAccepted: !wasPending,
+    })
+    uni.showToast({ title: wasPending ? '提醒时间已更新' : '下次提醒已开启', icon: 'success' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '微信提醒开启失败', icon: 'none' })
+  } finally {
+    reminderSaving.value = false
+  }
+}
+
+const disableWechatReminder = async () => {
+  if (!id.value || reminderSaving.value) return
+  reminderSaving.value = true
+  try {
+    wechatReminder.value = await disableImportantDayWechatReminder(id.value)
+    uni.showToast({ title: '已关闭本次提醒', icon: 'success' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '关闭失败', icon: 'none' })
+  } finally {
+    reminderSaving.value = false
+  }
+}
+
+const onWechatReminderSwitchChange = (event: Event) => {
+  const enabled = Boolean((event as unknown as { detail: { value: boolean } }).detail.value)
+  if (!archiveStore.user.isLoggedIn) {
+    reminderEnabledForNew.value = false
+    uni.navigateTo({ url: '/pages/login/index?target=anniversaryEdit&back=1' })
+    return
+  }
+  if (!id.value) {
+    reminderEnabledForNew.value = enabled
+    return
+  }
+  if (enabled) void enableWechatReminder()
+  else void disableWechatReminder()
 }
 
 const remove = () => {
@@ -242,8 +435,8 @@ const remove = () => {
   <view class="page-shell edit-page">
     <view class="edit-head">
       <text class="eyebrow">A DAY TO REMEMBER</text>
-      <text class="edit-head__title">{{ isEditing ? '编辑重要日子' : '收藏一个重要日子' }}</text>
-      <text class="edit-head__desc">先记下日期和意义，提醒功能可以在后续版本再慢慢加入。</text>
+      <text class="edit-head__title">{{ isEditing ? (canEditDay ? '编辑重要日子' : '查看重要日子') : '收藏一个重要日子' }}</text>
+      <text class="edit-head__desc">记下日期和意义，也可以为下一次到来开启微信提醒。</text>
     </view>
 
     <view v-if="initialLoading" class="form-card card edit-skeleton" aria-label="正在加载重要日子">
@@ -315,22 +508,44 @@ const remove = () => {
         <text class="field__tip">生日和纪念日适合每年重复；只发生一次的安排可选择“仅这一次”。</text>
       </view>
 
-      <view class="field">
-        <text class="field__label">提醒日期</text>
-        <view class="reminder-grid">
+      <view class="field wechat-reminder-field">
+        <view class="wechat-reminder-heading">
+          <view class="wechat-reminder-heading__main">
+            <view class="wechat-reminder-heading__icon"><AppIcon name="notification" :size="19" /></view>
+            <view>
+              <text class="field__label">微信服务通知</text>
+              <text class="field__hint">固定在 {{ wechatReminderSendTime }} 发出</text>
+            </view>
+          </view>
+          <view class="wechat-reminder-toggle">
+            <text class="wechat-reminder-status" :class="{ active: wechatReminderSwitchChecked }">{{ reminderStatusLabel }}</text>
+            <switch
+              class="wechat-reminder-switch"
+              color="#cf7465"
+              :checked="wechatReminderSwitchChecked"
+              :disabled="reminderSwitchDisabled"
+              aria-label="微信服务通知"
+              @change="onWechatReminderSwitchChange"
+            />
+          </view>
+        </view>
+
+        <text class="field__tip">{{ reminderStatusText }}</text>
+
+        <view class="wechat-reminder-options">
           <view
             v-for="item in reminderOptions"
-            :key="item.value"
-            class="reminder-option"
-            :class="{ active: reminderDaysBefore.includes(item.value) }"
-            :aria-pressed="reminderDaysBefore.includes(item.value)"
-            @tap="toggleReminder(item.value)"
+            :key="`wechat-${item.value}`"
+            class="wechat-reminder-option"
+            :class="{ active: wechatReminderDaysBefore === item.value }"
+            :aria-pressed="wechatReminderDaysBefore === item.value"
+            role="button"
+            @tap="chooseWechatReminder(item.value)"
           >
-            <view class="reminder-option__mark"><view v-if="reminderDaysBefore.includes(item.value)" /></view>
             <text>{{ item.label }}</text>
           </view>
         </view>
-        <text class="field__tip">可以多选。目前只保存提醒设置，消息提醒功能将在后续版本开放。</text>
+
       </view>
 
       <view class="field">
@@ -346,8 +561,8 @@ const remove = () => {
       </view>
     </view>
 
-    <button v-if="!initialLoading && !loadError" class="save-button" :disabled="archiveStore.user.isLoggedIn && !canSave" :loading="saving" @tap="save">{{ !archiveStore.user.isLoggedIn ? '登录后保存这个日子' : (saving ? '正在保存' : (isEditing ? '保存修改' : '收藏这个日子')) }}</button>
-    <button v-if="archiveStore.user.isLoggedIn && isEditing && !initialLoading && !loadError" class="delete-button" :disabled="deleting" :loading="deleting" @tap="remove">{{ deleting ? '正在删除' : '删除这个日子' }}</button>
+    <button v-if="canEditDay && !initialLoading && !loadError" class="save-button" :disabled="archiveStore.user.isLoggedIn && !canSave" :loading="saving" @tap="save">{{ !archiveStore.user.isLoggedIn ? '登录后保存这个日子' : (saving ? '正在保存' : (isEditing ? '保存修改' : '收藏这个日子')) }}</button>
+    <button v-if="archiveStore.user.isLoggedIn && canEditDay && isEditing && !initialLoading && !loadError" class="delete-button" :disabled="deleting" :loading="deleting" @tap="remove">{{ deleting ? '正在删除' : '删除这个日子' }}</button>
   </view>
 </template>
 
@@ -379,12 +594,16 @@ const remove = () => {
 .date-picker__icon--chevron { width: 30rpx; }
 .date-picker__text { display: flex; height: 34rpx; flex: none; align-items: center; justify-content: center; line-height: 34rpx; white-space: nowrap; }
 .field :deep(.segments) { margin-top: 17rpx; }
-.reminder-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16rpx; margin-top: 18rpx; }
-.reminder-option { display: flex; min-height: 88rpx; gap: 11rpx; padding: 0 20rpx; align-items: center; justify-content: flex-start; border: 1rpx solid #eaded8; border-radius: 22rpx; background: #fffcfa; color: #766864; font-size: 23rpx; line-height: 1; }
-.reminder-option.active { border-color: #dfa99e; background: #fff0ea; color: #a65349; font-weight: 700; }
-.reminder-option__mark { display: flex; width: 28rpx; height: 28rpx; flex: none; align-items: center; justify-content: center; border: 2rpx solid #d6c5bf; border-radius: 50%; background: #fff; }
-.reminder-option.active .reminder-option__mark { border-color: #ca6b5e; }
-.reminder-option__mark > view { width: 14rpx; height: 14rpx; border-radius: 50%; background: #ca6b5e; }
+.wechat-reminder-heading { display: flex; gap: 18rpx; align-items: center; justify-content: space-between; }
+.wechat-reminder-heading__main { display: flex; gap: 14rpx; align-items: center; }
+.wechat-reminder-heading__icon { display: flex; width: 62rpx; height: 62rpx; flex: none; align-items: center; justify-content: center; border-radius: 20rpx; background: #fff0ea; color: #b65f52; }
+.wechat-reminder-toggle { display: flex; gap: 4rpx; align-items: center; justify-content: flex-end; }
+.wechat-reminder-status { display: flex; min-height: 42rpx; align-items: center; justify-content: center; padding: 0 16rpx; border-radius: 21rpx; background: #f4eeeb; color: #8e817d; font-size: 19rpx; line-height: 1; }
+.wechat-reminder-status.active { background: #ffebe3; color: #ad584d; }
+.wechat-reminder-switch { flex: none; transform: scale(.72); transform-origin: right center; }
+.wechat-reminder-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10rpx; margin-top: 20rpx; }
+.wechat-reminder-option { display: flex; min-height: 64rpx; align-items: center; justify-content: center; padding: 0 8rpx; border: 1rpx solid #eaded8; border-radius: 19rpx; background: #fffcfa; color: #81736f; font-size: 20rpx; line-height: 1; text-align: center; }
+.wechat-reminder-option.active { border-color: #dda499; background: #fff0ea; color: #a65349; font-weight: 700; }
 .note-input { width: 100%; height: 190rpx; margin-top: 16rpx; padding: 19rpx 20rpx; border-radius: 20rpx; background: #fffaf7; color: #4e403d; font-size: 25rpx; line-height: 1.65; }
 .field--last .field__count { right: 14rpx; bottom: 43rpx; }
 .save-button { display: flex; width: 100%; min-height: 92rpx; margin-top: 28rpx; align-items: center; justify-content: center; border-radius: 28rpx; background: linear-gradient(135deg,#d87868,#c9695b); color: #fff; font-size: 28rpx; font-weight: 700; line-height: 1; box-shadow: 0 14rpx 28rpx rgba(197,95,83,.2); }
