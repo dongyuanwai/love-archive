@@ -2,11 +2,15 @@
 import { computed, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
+import LoadingIndicator from '@/components/LoadingIndicator.vue'
 import MoodMark from '@/components/MoodMark.vue'
 import SegmentControl from '@/components/SegmentControl.vue'
 import { useArchiveStore } from '@/stores/archive'
+import { listImportantDays } from '@/api/important-days'
 import { getInsightSummary, type InsightPeriod, type InsightSubject, type InsightSummary } from '@/api/insights'
 import { getCurrentRelationship } from '@/api/relationships'
+import type { MoodKind } from '@/types/domain'
+import { todayString } from '@/utils/date'
 import { syncTabBarSelection } from '@/utils/tab-bar'
 
 const store = useArchiveStore()
@@ -18,6 +22,13 @@ const reportLoading = ref(store.user.isLoggedIn)
 const reportShowLoading = ref(store.user.isLoggedIn)
 const reportReady = ref(false)
 const reportError = ref('')
+const calendarLoading = ref(false)
+const calendarError = ref('')
+const importantDayCount = ref<number | null>(null)
+const importantDayCountUserId = ref('')
+const currentMonth = todayString().slice(0, 7)
+const calendarMonth = ref(currentMonth)
+let calendarRequestId = 0
 const ownerOptions = computed(() => [
   { label: '我的情绪', value: 'mine' },
   ...(store.activeRelationship ? [{ label: `${store.activeRelationship.partnerName} 的情绪`, value: 'partner' }] : []),
@@ -27,8 +38,6 @@ const ranges: Array<{ label: string; value: InsightPeriod }> = [
   { label: '本月', value: 'month' },
   { label: '三个月', value: 'three_months' },
 ]
-const hasRecords = computed(() => (summary.value?.total || 0) > 0)
-
 const rangeStart = computed(() => {
   const date = new Date()
   const daysBack = range.value === 'week' ? 6 : range.value === 'month' ? 29 : 89
@@ -54,18 +63,24 @@ const periodLabel = computed(() => {
   return `${start.getMonth() + 1}月${start.getDate()}日—${end.getMonth() + 1}月${end.getDate()}日`
 })
 
-const currentMonthLabel = computed(() => {
-  const now = new Date()
-  return `${now.getFullYear()}年${now.getMonth() + 1}月`
+const calendarMonthLabel = computed(() => {
+  const [year, month] = calendarMonth.value.split('-')
+  return `${year}年${Number(month)}月`
 })
+const canGoToNextMonth = computed(() => calendarMonth.value < currentMonth)
+
+interface CalendarDay {
+  day: string
+  mood: MoodKind | ''
+}
 
 const days = computed(() => {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth()
+  const [selectedYear, selectedMonth] = calendarMonth.value.split('-').map(Number)
+  const year = selectedYear || new Date().getFullYear()
+  const month = (selectedMonth || 1) - 1
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const mondayOffset = (new Date(year, month, 1).getDay() + 6) % 7
-  const cells = Array.from({ length: mondayOffset }, () => ({ day: '', mood: '' }))
+  const cells: CalendarDay[] = Array.from({ length: mondayOffset }, () => ({ day: '', mood: '' }))
   for (let day = 1; day <= daysInMonth; day++) {
     const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     const item = calendarSummary.value?.calendar.find((entry) => entry.date === dateString)
@@ -74,10 +89,54 @@ const days = computed(() => {
   return cells
 })
 
-const loadReport = async (showLoading = true) => {
+const loadCalendar = async () => {
+  if (!store.user.isLoggedIn) {
+    calendarSummary.value = null
+    return
+  }
+  const requestId = ++calendarRequestId
+  const requestedMonth = calendarMonth.value
+  calendarLoading.value = true
+  calendarError.value = ''
+  calendarSummary.value = null
+  try {
+    const result = await getInsightSummary('month', owner.value, requestedMonth)
+    if (requestId === calendarRequestId) calendarSummary.value = result
+  } catch (error) {
+    if (requestId === calendarRequestId) {
+      calendarError.value = error instanceof Error ? error.message : '月份加载失败'
+    }
+  } finally {
+    if (requestId === calendarRequestId) calendarLoading.value = false
+  }
+}
+
+const changeCalendarMonth = (offset: number) => {
+  if (offset > 0 && !canGoToNextMonth.value) return
+  const [year, month] = calendarMonth.value.split('-').map(Number)
+  const next = new Date(year || new Date().getFullYear(), (month || 1) - 1 + offset, 1)
+  calendarMonth.value = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`
+  void loadCalendar()
+}
+
+const onCalendarMonthChange = (event: { detail: { value: string } }) => {
+  const nextMonth = event.detail.value.slice(0, 7)
+  if (!nextMonth || nextMonth === calendarMonth.value || nextMonth > currentMonth) return
+  calendarMonth.value = nextMonth
+  void loadCalendar()
+}
+
+const loadReport = async (showLoading = true, refreshImportantDays = false) => {
   if (!store.user.isLoggedIn) {
     summary.value = null
+    importantDayCount.value = null
+    importantDayCountUserId.value = ''
     return
+  }
+  const currentUserId = store.user.id || ''
+  if (importantDayCountUserId.value !== currentUserId) {
+    importantDayCount.value = null
+    importantDayCountUserId.value = currentUserId
   }
   reportLoading.value = true
   reportShowLoading.value = showLoading
@@ -86,12 +145,26 @@ const loadReport = async (showLoading = true) => {
     const current = await getCurrentRelationship()
     store.setCurrentRelationship(current)
     if (owner.value === 'partner' && !current.active) owner.value = 'mine'
-    const [reportResult, calendarResult] = await Promise.all([
+    const importantDaysRequest = refreshImportantDays || importantDayCount.value === null
+      ? listImportantDays({ page: 1, pageSize: 1 })
+      : Promise.resolve(null)
+    const [reportResult, calendarResult, importantDaysResult] = await Promise.allSettled([
       getInsightSummary(range.value, owner.value),
-      getInsightSummary('month', owner.value),
+      getInsightSummary('month', owner.value, calendarMonth.value),
+      importantDaysRequest,
     ])
-    summary.value = reportResult
-    calendarSummary.value = calendarResult
+    if (reportResult.status === 'rejected') throw reportResult.reason
+    summary.value = reportResult.value
+    if (calendarResult.status === 'fulfilled') {
+      calendarSummary.value = calendarResult.value
+      calendarError.value = ''
+    } else {
+      calendarSummary.value = null
+      calendarError.value = calendarResult.reason instanceof Error ? calendarResult.reason.message : '月份加载失败'
+    }
+    if (importantDaysResult.status === 'fulfilled' && importantDaysResult.value) {
+      importantDayCount.value = importantDaysResult.value.pagination.total
+    }
   } catch (error) {
     reportError.value = error instanceof Error ? error.message : '情绪报告加载失败'
   } finally {
@@ -103,7 +176,7 @@ const loadReport = async (showLoading = true) => {
 
 onShow(() => {
   syncTabBarSelection()
-  void loadReport(!reportReady.value)
+  void loadReport(!reportReady.value, true)
 })
 watch([owner, range], () => { void loadReport(true) })
 </script>
@@ -148,22 +221,62 @@ watch([owner, range], () => { void loadReport(true) })
       <text class="empty-state__desc">{{ reportError }}</text>
       <button class="report-retry" @tap="loadReport">重新加载</button>
     </view>
-    <template v-else-if="hasRecords">
+    <template v-else-if="store.user.isLoggedIn">
     <view class="report-content" :class="{ 'report-content--refreshing': reportShowLoading }">
     <SegmentControl v-model="owner" :options="ownerOptions" class="owner-switch" />
 
     <view class="section-heading calendar-heading">
-      <view><text class="section-title">情绪日历</text><text class="section-desc">{{ currentMonthLabel }}</text></view>
+      <view><text class="section-title">情绪日历</text><text class="section-desc">按月回看每一种心情</text></view>
       <view class="calendar-legend">
-        <view class="calendar-legend__item calendar-legend__item--happy"><i /><text>开心</text></view>
-        <view class="calendar-legend__item calendar-legend__item--sad"><i /><text>难过</text></view>
+        <view class="calendar-legend__item calendar-legend__item--happy"><MoodMark mood="happy" size="tiny" /><text>开心</text></view>
+        <view class="calendar-legend__item calendar-legend__item--sad"><MoodMark mood="sad" size="tiny" /><text>难过</text></view>
       </view>
     </view>
     <view class="calendar-card card">
-      <view class="week-row"><text v-for="item in ['一','二','三','四','五','六','日']" :key="item">{{ item }}</text></view>
-      <view class="days-grid">
-        <view v-for="(item, index) in days" :key="index" class="day" :class="item.mood ? `day--${item.mood}` : ''"><text>{{ item.day }}</text><i v-if="item.mood" /></view>
+      <view class="calendar-toolbar">
+        <view class="month-nav" hover-class="month-nav--pressed" role="button" aria-label="查看上个月" @tap="changeCalendarMonth(-1)">
+          <view class="month-nav__icon month-nav__icon--previous"><AppIcon name="chevron" :size="17" /></view>
+        </view>
+        <picker mode="date" fields="month" :value="`${calendarMonth}-01`" :end="todayString()" @change="onCalendarMonthChange">
+          <view class="month-picker">
+            <AppIcon name="calendar" :size="17" />
+            <text>{{ calendarMonthLabel }}</text>
+            <view class="month-picker__chevron"><AppIcon name="chevron" :size="13" /></view>
+          </view>
+        </picker>
+        <view
+          class="month-nav"
+          :class="{ 'month-nav--disabled': !canGoToNextMonth }"
+          :hover-class="canGoToNextMonth ? 'month-nav--pressed' : 'none'"
+          role="button"
+          :aria-disabled="!canGoToNextMonth"
+          aria-label="查看下个月"
+          @tap="changeCalendarMonth(1)"
+        >
+          <AppIcon name="chevron" :size="17" />
+        </view>
       </view>
+      <view v-if="calendarError && !calendarLoading" class="calendar-error">
+        <text class="calendar-error__title">这个月暂时无法读取</text>
+        <text class="calendar-error__desc">{{ calendarError }}</text>
+        <view class="calendar-error__retry" hover-class="calendar-error__retry--pressed" role="button" @tap="loadCalendar">重新加载</view>
+      </view>
+      <template v-else>
+        <view class="week-row"><text v-for="item in ['一','二','三','四','五','六','日']" :key="item">{{ item }}</text></view>
+        <view class="days-grid">
+          <view
+            v-for="(item, index) in days"
+            :key="index"
+            class="day"
+            :class="item.mood ? `day--${item.mood}` : ''"
+            :aria-label="item.day && item.mood ? `${item.day}日，${item.mood === 'happy' ? '开心' : '难过'}` : item.day ? `${item.day}日` : undefined"
+          >
+            <text>{{ item.day }}</text>
+            <MoodMark v-if="item.mood" :mood="item.mood" size="tiny" />
+          </view>
+        </view>
+      </template>
+      <view v-if="calendarLoading" class="calendar-loading"><LoadingIndicator text="正在翻阅这个月…" compact /></view>
     </view>
 
     <view class="range-tabs">
@@ -185,7 +298,7 @@ watch([owner, range], () => { void loadReport(true) })
 
     <view class="stats-grid">
       <view class="stat-card card"><view class="stat-icon stat-icon--warm"><AppIcon name="calendar" :size="20" /></view><text class="stat-value">{{ report.total }}</text><text class="stat-label">记录次数</text></view>
-      <view class="stat-card card"><view class="stat-icon stat-icon--blue"><AppIcon name="trend" :size="20" /></view><text class="stat-value">{{ report.total ? '已开始' : '0 天' }}</text><text class="stat-label">记录状态</text></view>
+      <view class="stat-card card"><view class="stat-icon stat-icon--blue"><AppIcon name="calendar" :size="20" /></view><text class="stat-value">{{ importantDayCount ?? '—' }}</text><text class="stat-label">重要日子</text></view>
       <view class="stat-card card"><view class="stat-icon stat-icon--warm"><MoodMark mood="happy" size="small" /></view><text class="stat-value">{{ report.common }}</text><text class="stat-label">常见感受</text></view>
       <view class="stat-card card"><view class="stat-icon stat-icon--blue"><AppIcon name="hug" :size="20" /></view><text class="stat-value">{{ report.response }}</text><text class="stat-label">收到回应</text></view>
     </view>
@@ -201,7 +314,7 @@ watch([owner, range], () => { void loadReport(true) })
 </template>
 
 <style scoped lang="scss">
-.insights-page { padding-bottom: calc(112rpx + env(safe-area-inset-bottom)); }
+.insights-page { padding-bottom: calc(184rpx + env(safe-area-inset-bottom)); }
 .insights-head { padding: 12rpx 2rpx 34rpx; }
 .insights-head__title { display: block; margin-top: 18rpx; font-size: 46rpx; font-weight: 750; }
 .insights-head__desc { display: block; margin-top: 14rpx; color: #746663; font-size: 24rpx; }
@@ -235,10 +348,23 @@ watch([owner, range], () => { void loadReport(true) })
 .owner-switch { margin-top: 0; }
 .calendar-legend { gap: 10rpx; font-size: 19rpx; }
 .calendar-legend__item { gap: 7rpx; padding: 9rpx 13rpx; border: 1rpx solid transparent; border-radius: 999rpx; line-height: 1; }
-.calendar-legend__item i { width: 11rpx; height: 11rpx; flex: none; border-radius: 50%; background: currentColor; }
 .calendar-legend__item--happy { border-color: #f3d6c0; background: #fff0e3; color: #a76848; }
 .calendar-legend__item--sad { border-color: #d3e0ea; background: #e9f0f6; color: #5e7890; }
-.calendar-card { margin-top: 18rpx; padding: 25rpx 20rpx; }.week-row{margin-bottom:14rpx}.days-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8rpx}.day{display:flex;height:68rpx;flex-direction:column;align-items:center;justify-content:center;border-radius:18rpx;color:#736461;font-size:22rpx}.day i{width:8rpx;height:8rpx;margin-top:5rpx;border-radius:50%;background:currentColor}.day--happy{background:#fff0e3;color:#a76848}.day--sad{background:#e9f0f6;color:#5e7890}
+.calendar-card { position: relative; margin-top: 18rpx; padding: 22rpx 20rpx 25rpx; overflow: hidden; }
+.calendar-toolbar { display: flex; margin-bottom: 24rpx; align-items: center; justify-content: space-between; }
+.month-nav { display: flex; width: 62rpx; height: 62rpx; align-items: center; justify-content: center; border: 1rpx solid #ead8d2; border-radius: 19rpx; background: #fff9f6; color: #9b655d; }
+.month-nav--pressed { background: #f8e7e1; }
+.month-nav--disabled { opacity: .32; }
+.month-nav__icon--previous { transform: rotate(180deg); }
+.month-picker { display: flex; min-width: 230rpx; height: 62rpx; gap: 10rpx; align-items: center; justify-content: center; border-radius: 20rpx; background: #f8eeeb; color: #765955; font-size: 24rpx; font-weight: 700; line-height: 1; }
+.month-picker__chevron { transform: rotate(90deg); color: #a88680; }
+.calendar-loading { position: absolute; z-index: 3; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255, 252, 250, .86); }
+.calendar-error { display: flex; min-height: 300rpx; padding: 30rpx; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.calendar-error__title { color: #675451; font-size: 25rpx; font-weight: 700; }
+.calendar-error__desc { max-width: 470rpx; margin-top: 12rpx; color: #9a8985; font-size: 20rpx; line-height: 1.55; }
+.calendar-error__retry { display: flex; height: 58rpx; margin-top: 22rpx; padding: 0 24rpx; align-items: center; justify-content: center; border-radius: 18rpx; background: #f7e7e2; color: #a46258; font-size: 21rpx; font-weight: 700; line-height: 1; }
+.calendar-error__retry--pressed { background: #efd7d0; }
+.week-row{margin-bottom:14rpx}.days-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8rpx}.day{display:flex;height:68rpx;gap:3rpx;flex-direction:column;align-items:center;justify-content:center;border-radius:18rpx;color:#736461;font-size:22rpx;line-height:1}.day--happy{background:#fff0e3;color:#a76848}.day--sad{background:#e9f0f6;color:#5e7890}
 .privacy-tip { gap: 10rpx; margin: 22rpx 8rpx 0; align-items: flex-start; color: #958682; font-size: 20rpx; line-height: 1.6; }
 .insights-skeleton,.report-content{display:block}.skeleton-block{overflow:hidden;background:linear-gradient(100deg,#f3e6e4 20%,#fbeeed 42%,#f3e6e4 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}.skeleton-line{border-radius:999rpx}.skeleton-owner{height:80rpx;border-radius:22rpx}.skeleton-heading-title{width:142rpx;height:36rpx}.skeleton-heading-desc{width:122rpx;height:21rpx;margin-top:7rpx}.skeleton-legend{width:176rpx;height:42rpx;border-radius:999rpx}.skeleton-card{pointer-events:none}.skeleton-day{border-radius:18rpx}.skeleton-tabs{align-items:center}.skeleton-pill{width:112rpx;height:62rpx;border-radius:999rpx}.skeleton-overview{min-height:330rpx}.skeleton-kicker{width:94rpx;height:21rpx}.skeleton-overview-title{width:238rpx;height:31rpx;margin-top:6rpx}.skeleton-period{width:170rpx;height:20rpx}.skeleton-balance{display:flex;margin-top:30rpx;align-items:center;justify-content:space-between}.skeleton-mood{width:205rpx;height:72rpx;border-radius:22rpx}.skeleton-bar{height:16rpx;margin-top:24rpx;border-radius:99rpx}.skeleton-note{width:78%;height:22rpx;margin-top:21rpx}.skeleton-stat{min-height:190rpx}.skeleton-stat-icon{width:57rpx;height:57rpx;border-radius:19rpx}.skeleton-stat-value{width:92rpx;height:31rpx;margin-top:16rpx}.skeleton-stat-label{width:106rpx;height:21rpx;margin-top:5rpx}.report-content--refreshing .calendar-card,.report-content--refreshing .overview,.report-content--refreshing .stat-card{position:relative;overflow:hidden;pointer-events:none}.report-content--refreshing .calendar-card::after,.report-content--refreshing .overview::after,.report-content--refreshing .stat-card::after{position:absolute;z-index:2;inset:0;content:'';background:linear-gradient(100deg,rgba(255,250,248,.34) 20%,rgba(245,226,225,.72) 42%,rgba(255,250,248,.34) 64%);background-size:220% 100%;animation:skeleton-shimmer 1.35s ease-in-out infinite}@keyframes skeleton-shimmer{to{background-position:-220% 0}}
 @media (prefers-reduced-motion: reduce) { .balance-bar__happy { transition: none; }.skeleton-block,.report-content--refreshing .calendar-card::after,.report-content--refreshing .overview::after,.report-content--refreshing .stat-card::after{animation:none} }

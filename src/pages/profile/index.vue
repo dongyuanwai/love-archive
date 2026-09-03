@@ -204,7 +204,7 @@ const logout = () => {
 </template>
 
 <style scoped lang="scss">
-.profile-page { padding-bottom: calc(108rpx + env(safe-area-inset-bottom)); }
+.profile-page { padding-bottom: calc(184rpx + env(safe-area-inset-bottom)); }
 .profile-head { padding: 12rpx 2rpx 38rpx; }.profile-head__title{display:block;margin-top:18rpx;font-size:46rpx;font-weight:750}
 .login-action{display:flex;min-height:64rpx;margin-left:14rpx;padding:0 22rpx;align-items:center;justify-content:center;border-radius:20rpx;background:#fff0e8;color:#a45d52;font-size:22rpx;font-weight:700;line-height:1}
 .identity,.relationship,.menu-row{display:flex;align-items:center}.identity{padding:26rpx}.identity__avatar{display:flex;width:92rpx;height:92rpx;flex:none;align-items:center;justify-content:center;border-radius:31rpx;background:linear-gradient(145deg,#f9c9a7,#efa989);color:#784a3e;font-size:33rpx;font-weight:750}.identity__avatar--image{display:block;background:#f5ebe5}.identity__copy{min-width:0;flex:1;margin-left:20rpx}.identity__name,.identity__desc{display:block}.identity__name{font-size:31rpx;font-weight:750}.identity__desc{margin-top:7rpx;color:#958682;font-size:22rpx}.login-badge{padding:8rpx 14rpx;border-radius:999rpx;background:#edf7ef;color:#4f8760;font-size:19rpx;font-weight:650}

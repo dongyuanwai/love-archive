@@ -508,7 +508,7 @@ watch(filter, (value) => {
 </template>
 
 <style scoped lang="scss">
-.archive-page { padding-top: 24rpx; padding-bottom: calc(104rpx + env(safe-area-inset-bottom)); }
+.archive-page { padding-top: 24rpx; padding-bottom: calc(184rpx + env(safe-area-inset-bottom)); }
 .hero { display: flex; align-items: flex-start; justify-content: space-between; padding: 12rpx 2rpx 38rpx; }
 .guest-guide{display:flex;margin-bottom:28rpx;padding:24rpx;align-items:center;border-color:#efd8d0;background:rgba(255,250,246,.88)}
 .guest-guide__icon{display:flex;width:62rpx;height:62rpx;flex:none;align-items:center;justify-content:center;border-radius:21rpx;background:#ffe8df;color:#b45f53}

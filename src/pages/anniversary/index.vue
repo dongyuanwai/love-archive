@@ -154,7 +154,7 @@ const kindClass = (item: Anniversary) => `date-card__icon--${item.kind.replace('
 </template>
 
 <style scoped lang="scss">
-.anniversary-page { padding-top: 26rpx; padding-bottom: calc(116rpx + env(safe-area-inset-bottom)); }
+.anniversary-page { padding-top: 26rpx; padding-bottom: calc(184rpx + env(safe-area-inset-bottom)); }
 .anniversary-head { display: flex; gap: 24rpx; padding: 12rpx 2rpx 38rpx; align-items: flex-start; justify-content: space-between; }
 .anniversary-head__title,.anniversary-head__desc { display: block; }
 .anniversary-head__title { max-width: 570rpx; margin-top: 16rpx; color: #403533; font-size: 44rpx; font-weight: 750; line-height: 1.35; }

@@ -16,6 +16,7 @@ export interface InsightSummary {
   calendar: Array<{ date: string; happy: number; sad: number }>
 }
 
-export function getInsightSummary(period: InsightPeriod, subject: InsightSubject): Promise<InsightSummary> {
-  return apiRequest({ path: `/insights/summary?period=${period}&subject=${subject}` })
+export function getInsightSummary(period: InsightPeriod, subject: InsightSubject, month?: string): Promise<InsightSummary> {
+  const monthQuery = month ? `&month=${encodeURIComponent(month)}` : ''
+  return apiRequest({ path: `/insights/summary?period=${period}&subject=${subject}${monthQuery}` })
 }

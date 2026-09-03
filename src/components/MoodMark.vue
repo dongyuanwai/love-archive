@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { MoodKind } from '@/types/domain'
 
-withDefaults(defineProps<{ mood: MoodKind; size?: 'small' | 'medium' | 'large' }>(), { size: 'medium' })
+withDefaults(defineProps<{ mood: MoodKind; size?: 'tiny' | 'small' | 'medium' | 'large' }>(), { size: 'medium' })
 </script>
 
 <template>
@@ -19,6 +19,7 @@ withDefaults(defineProps<{ mood: MoodKind; size?: 'small' | 'medium' | 'large' }
   align-items: center;
   justify-content: center;
   border-radius: 50%;
+  &--tiny { width: 34rpx; height: 34rpx; }
   &--small { width: 44rpx; height: 44rpx; }
   &--medium { width: 64rpx; height: 64rpx; }
   &--large { width: 112rpx; height: 112rpx; }
@@ -29,5 +30,7 @@ withDefaults(defineProps<{ mood: MoodKind; size?: 'small' | 'medium' | 'large' }
 .mark__eye { width: 6rpx; height: 7rpx; border-radius: 50%; background: currentColor; }
 .mark__mouth { width: 35%; height: 16%; margin-top: 10%; border: 3rpx solid currentColor; border-top: 0; border-radius: 0 0 30rpx 30rpx; }
 .mark--sad .mark__mouth { border-top: 3rpx solid currentColor; border-bottom: 0; border-radius: 30rpx 30rpx 0 0; }
+.mark--tiny .mark__eye { width: 4rpx; height: 4rpx; }
+.mark--tiny .mark__mouth { margin-top: 8%; border-width: 2rpx; }
 .mark--small .mark__mouth { border-width: 2rpx; }
 </style>
