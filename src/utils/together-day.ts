@@ -68,7 +68,7 @@ export const getTogetherDayDuration = (
   return {
     years,
     months,
-    days: differenceInDays(today, latestMonthAnniversary),
+    days: differenceInDays(today, latestMonthAnniversary) + 1,
     totalDays: differenceInDays(today, start) + 1,
   }
 }
