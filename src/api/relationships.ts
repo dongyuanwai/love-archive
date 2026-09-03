@@ -5,6 +5,7 @@ export interface CurrentRelationshipResponse {
   relationship: {
     id: string
     startedAt: string
+    togetherSince: string | null
     partner: {
       id: string
       nickname: string
@@ -21,6 +22,10 @@ export interface CurrentRelationshipResponse {
 export interface RelationshipInvite {
   code: string
   expiresAt: string
+}
+
+export interface TogetherDayResponse {
+  date: string
 }
 
 export function getCurrentRelationship(): Promise<CurrentRelationshipResponse> {
@@ -45,6 +50,21 @@ export function acceptRelationshipInvite(code: string): Promise<{ id: string; st
 export function unbindCurrentRelationship(): Promise<{ success: boolean; endedAt: string }> {
   return apiRequest({
     path: '/relationships/current',
+    method: 'DELETE',
+  })
+}
+
+export function updateTogetherDay(date: string): Promise<TogetherDayResponse> {
+  return apiRequest<TogetherDayResponse>({
+    path: '/relationships/current/together-day',
+    method: 'PUT',
+    data: { date },
+  })
+}
+
+export function clearTogetherDay(): Promise<{ success: boolean }> {
+  return apiRequest<{ success: boolean }>({
+    path: '/relationships/current/together-day',
     method: 'DELETE',
   })
 }

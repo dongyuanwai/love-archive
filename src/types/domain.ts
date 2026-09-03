@@ -57,6 +57,7 @@ export interface Relationship {
   partnerInitial: string
   partnerAvatarUrl: string
   startedAt: string
+  togetherSince?: string
   active: boolean
   daysTogether?: number
   sharedMoodCount?: number

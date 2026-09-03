@@ -17,6 +17,10 @@
       "style": { "navigationBarTitleText": "编辑重要日子" }
     },
     {
+      "path": "pages/together-day/edit",
+      "style": { "navigationBarTitleText": "在一起的日子" }
+    },
+    {
       "path": "pages/insights/index",
       "style": { "navigationBarTitleText": "情绪回顾" }
     },

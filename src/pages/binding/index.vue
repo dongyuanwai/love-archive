@@ -116,7 +116,7 @@ const unbind = () => {
         <view class="bond-avatars"><view class="bond-avatar bond-avatar--me"><image v-if="store.user.avatarUrl" class="user-avatar-image" :src="store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ store.user.initial }}</text></view><view class="bond-line"><AppIcon name="heart" :size="17" filled color="#c96a5c" /></view><view class="bond-avatar bond-avatar--partner"><image v-if="store.activeRelationship.partnerAvatarUrl" class="user-avatar-image" :src="store.activeRelationship.partnerAvatarUrl" mode="aspectFill" /><text v-else>{{ store.activeRelationship.partnerInitial }}</text></view></view>
         <text class="bond-title">{{ store.user.name }} & {{ store.activeRelationship.partnerName }}</text>
         <text class="bond-desc">从 {{ store.activeRelationship.startedAt }} 开始共同存档</text>
-        <view class="bond-stats"><view><text>{{ store.activeRelationship.daysTogether || 1 }}</text><span>陪伴天数</span></view><i/><view><text>{{ store.activeRelationship.sharedMoodCount || 0 }}</text><span>共同可见记录</span></view><i/><view><text>{{ store.activeRelationship.responseCount || 0 }}</text><span>温柔回应</span></view></view>
+        <view class="bond-stats"><view><text>{{ store.activeRelationship.daysTogether || 1 }}</text><span>共同存档天数</span></view><i/><view><text>{{ store.activeRelationship.sharedMoodCount || 0 }}</text><span>共同可见记录</span></view><i/><view><text>{{ store.activeRelationship.responseCount || 0 }}</text><span>温柔回应</span></view></view>
       </view>
       <view class="rules card">
         <text class="rules__title">这段关系里的隐私规则</text>

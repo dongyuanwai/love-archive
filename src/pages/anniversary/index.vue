@@ -7,12 +7,19 @@ import { useArchiveStore } from '@/stores/archive'
 import type { Anniversary } from '@/types/domain'
 import { anniversaryKindLabels, formatAnniversaryDate, getAnniversaryStatus } from '@/utils/anniversary'
 import { syncTabBarSelection } from '@/utils/tab-bar'
+import {
+  formatTogetherDayDate,
+  getTogetherDayDuration,
+} from '@/utils/together-day'
 
 const archiveStore = useArchiveStore()
 const anniversaryStore = useAnniversaryStore()
 
 const upcomingItems = computed(() => anniversaryStore.sortedItems.filter((item) => item.archived !== true))
 const archivedItems = computed(() => anniversaryStore.sortedItems.filter((item) => item.archived === true))
+const togetherDay = computed(() => archiveStore.activeRelationship?.togetherSince || '')
+const togetherDuration = computed(() =>
+  togetherDay.value ? getTogetherDayDuration(togetherDay.value) : null)
 const initialLoading = computed(() => anniversaryStore.loading && !anniversaryStore.loaded)
 const initialError = computed(() => anniversaryStore.error && !anniversaryStore.loaded)
 
@@ -23,6 +30,7 @@ onShow(() => {
 
 const goCreate = () => uni.navigateTo({ url: '/pages/anniversary/edit' })
 const goEdit = (id: string) => uni.navigateTo({ url: `/pages/anniversary/edit?id=${id}` })
+const goTogetherDay = () => uni.navigateTo({ url: '/pages/together-day/edit' })
 const retry = () => { void anniversaryStore.loadForUser(archiveStore.user.id, true) }
 const kindClass = (item: Anniversary) => `date-card__icon--${item.kind.replace('_', '-')}`
 </script>
@@ -37,6 +45,35 @@ const kindClass = (item: Anniversary) => `date-card__icon--${item.kind.replace('
       </view>
       <view class="head-add" role="button" aria-label="添加重要日子" hover-class="tap-hover" @tap="goCreate">
         <AppIcon name="plus" :size="23" />
+      </view>
+    </view>
+
+    <view v-if="archiveStore.activeRelationship" class="together-section">
+      <view class="list-heading together-heading">
+        <text class="section-title">我们的日子</text>
+        <text>双方共同珍藏</text>
+      </view>
+      <view
+        class="together-date-card card"
+        role="button"
+        :aria-label="togetherDay ? '查看在一起的日子' : '添加在一起的日子'"
+        hover-class="tap-hover"
+        @tap="goTogetherDay"
+      >
+        <view class="together-date-card__icon"><AppIcon name="heart" :size="24" filled /></view>
+        <view v-if="togetherDay && togetherDuration" class="together-date-card__copy">
+          <view class="together-date-card__title-row">
+            <text class="together-date-card__title">在一起的日子</text>
+            <text class="together-date-card__duration">{{ togetherDuration.years }} 年 {{ togetherDuration.months }} 月 {{ togetherDuration.days }} 天</text>
+          </view>
+          <text class="together-date-card__meta">从 {{ formatTogetherDayDate(togetherDay) }} 开始</text>
+          <text class="together-date-card__note">今天是彼此相伴的第 {{ togetherDuration.totalDays }} 天</text>
+        </view>
+        <view v-else class="together-date-card__copy">
+          <text class="together-date-card__title">添加在一起的日子</text>
+          <text class="together-date-card__meta">设置后，就能看到你们一起走过了多久</text>
+        </view>
+        <AppIcon name="chevron" :size="17" color="#aa766d" />
       </view>
     </view>
 
@@ -123,6 +160,18 @@ const kindClass = (item: Anniversary) => `date-card__icon--${item.kind.replace('
 .anniversary-head__title { max-width: 570rpx; margin-top: 16rpx; color: #403533; font-size: 44rpx; font-weight: 750; line-height: 1.35; }
 .anniversary-head__desc { max-width: 560rpx; margin-top: 14rpx; color: #7e706c; font-size: 24rpx; line-height: 1.7; }
 .head-add { display: flex; width: 76rpx; height: 76rpx; flex: none; margin-top: 2rpx; align-items: center; justify-content: center; border: 1rpx solid #edcfc8; border-radius: 25rpx; background: #fff6f2; color: #a9554b; box-shadow: 0 9rpx 24rpx rgba(154,85,72,.08); }
+.together-section { margin-bottom: 36rpx; }
+.together-heading { min-height: 56rpx; }
+.together-date-card { position: relative; display: flex; overflow: hidden; min-height: 150rpx; margin-top: 15rpx; padding: 24rpx 22rpx; align-items: center; border-color: #edcec7; background: linear-gradient(135deg,#fffdfa,#ffefea); }
+.together-date-card::after { position: absolute; width: 140rpx; height: 140rpx; right: -58rpx; bottom: -78rpx; border-radius: 50%; background: rgba(238,154,134,.12); content: ''; pointer-events: none; }
+.together-date-card__icon { position: relative; z-index: 1; display: flex; width: 76rpx; height: 76rpx; flex: none; align-items: center; justify-content: center; border-radius: 25rpx; background: #ffded5; color: #a85248; }
+.together-date-card__copy { position: relative; z-index: 1; min-width: 0; flex: 1; margin: 0 17rpx; }
+.together-date-card__title-row { display: flex; gap: 12rpx; align-items: center; justify-content: space-between; }
+.together-date-card__title,.together-date-card__meta,.together-date-card__note { display: block; }
+.together-date-card__title { color: #4a3a37; font-size: 27rpx; font-weight: 760; }
+.together-date-card__duration { flex: none; color: #ae574d; font-size: 20rpx; font-weight: 750; white-space: nowrap; }
+.together-date-card__meta { overflow: hidden; margin-top: 7rpx; color: #887773; font-size: 20rpx; text-overflow: ellipsis; white-space: nowrap; }
+.together-date-card__note { margin-top: 5rpx; color: #a06a61; font-size: 19rpx; }
 .list-heading { display: flex; min-height: 70rpx; align-items: center; justify-content: space-between; }
 .list-heading .section-title { margin: 0; font-size: 32rpx; }
 .list-heading > text:last-child { color: #92827d; font-size: 21rpx; }

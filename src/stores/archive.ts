@@ -131,12 +131,17 @@ export const useArchiveStore = defineStore('archive', {
         partnerInitial: partnerName.slice(-1),
         partnerAvatarUrl: resolveAssetUrl(result.relationship.partner.avatarUrl),
         startedAt: result.relationship.startedAt.slice(0, 10),
+        togetherSince: result.relationship.togetherSince?.slice(0, 10),
         active: true,
         daysTogether: result.relationship.stats.daysTogether,
         sharedMoodCount: result.relationship.stats.sharedMoodCount,
         responseCount: result.relationship.stats.responseCount,
       }
       this.clearInvite()
+    },
+    setTogetherSince(date?: string) {
+      if (!this.relationship.active) return
+      this.relationship.togetherSince = date
     },
     setInvite(invite: RelationshipInvite) {
       this.inviteCode = invite.code

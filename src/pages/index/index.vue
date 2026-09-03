@@ -15,6 +15,10 @@ import { getMoodDetail } from '@/api/moods'
 import { ApiError } from '@/api/request'
 import { syncTabBarSelection } from '@/utils/tab-bar'
 import { anniversaryKindLabels, formatAnniversaryDate, getAnniversaryStatus } from '@/utils/anniversary'
+import {
+  formatTogetherDayDate,
+  getTogetherDayDuration,
+} from '@/utils/together-day'
 
 const store = useArchiveStore()
 const anniversaryStore = useAnniversaryStore()
@@ -58,6 +62,10 @@ const inviteInput = ref('')
 const bindingLoading = ref(false)
 const feedRequestIds: Record<ArchiveFilter, number> = { all: 0, me: 0, partner: 0 }
 let contextRequestId = 0
+
+const togetherDay = computed(() => store.activeRelationship?.togetherSince || '')
+const togetherDuration = computed(() =>
+  togetherDay.value ? getTogetherDayDuration(togetherDay.value) : null)
 
 const ensureInviteCode = async () => {
   if (!store.user.isLoggedIn || store.activeRelationship || store.inviteCode || inviteLoading.value) return
@@ -222,6 +230,7 @@ const goLogin = (target: 'create' | 'binding' | 'profile') => uni.navigateTo({ u
 const goCreate = () => uni.navigateTo({ url: '/pages/create/index' })
 const goAnniversary = () => uni.switchTab({ url: '/pages/anniversary/index' })
 const goAddAnniversary = () => uni.navigateTo({ url: '/pages/anniversary/edit' })
+const goTogetherDay = () => uni.navigateTo({ url: '/pages/together-day/edit' })
 const goBinding = () => store.user.isLoggedIn ? uni.navigateTo({ url: '/pages/binding/index' }) : goLogin('binding')
 const copyInviteCode = () => {
   if (!store.inviteCode) return
@@ -300,6 +309,37 @@ watch(filter, (value) => {
         <text class="guest-guide__desc">你可以先浏览功能，也可以先填写心情和重要日子；需要保存时，再自主选择微信登录。</text>
       </view>
       <view class="guest-guide__action" role="button" hover-class="heading-action--pressed" @tap="goLogin('profile')">去登录</view>
+    </view>
+
+    <view
+      v-if="store.activeRelationship"
+      class="together-card card"
+      role="button"
+      :aria-label="togetherDay ? '查看在一起的日子' : '设置在一起的日子'"
+      hover-class="together-card--pressed"
+      :hover-start-time="20"
+      @tap="goTogetherDay"
+    >
+      <view class="together-card__icon"><AppIcon name="heart" :size="24" filled /></view>
+      <view v-if="togetherDay && togetherDuration" class="together-card__content">
+        <view class="together-card__top">
+          <text class="together-card__label">我们已经在一起</text>
+        </view>
+        <view class="together-card__duration">
+          <text class="together-card__number">{{ togetherDuration.years }}</text><text class="together-card__unit">年</text>
+          <text class="together-card__number">{{ togetherDuration.months }}</text><text class="together-card__unit">月</text>
+          <text class="together-card__number">{{ togetherDuration.days }}</text><text class="together-card__unit">天</text>
+        </view>
+        <view class="together-card__meta">
+          <text>相伴第 {{ togetherDuration.totalDays }} 天</text>
+          <text>从 {{ formatTogetherDayDate(togetherDay) }} 开始</text>
+        </view>
+      </view>
+      <view v-else class="together-card__content together-card__content--empty">
+        <text class="together-card__empty-title">设置在一起的日子</text>
+        <text class="together-card__empty-desc">一起看看，你们已经走过了多久</text>
+      </view>
+      <view class="together-card__chevron"><AppIcon name="chevron" :size="17" color="#a66d64" /></view>
     </view>
 
     <view class="special-days-heading">
@@ -481,6 +521,24 @@ watch(filter, (value) => {
 .paired-avatar--me { background: #f7c29f; }
 .paired-avatar--partner { margin-left: -22rpx; background: #c7dae9; color: #526a80; }
 .user-avatar-image { display: block; width: 100%; height: 100%; border-radius: inherit; }
+.together-card { position: relative; display: flex; overflow: hidden; min-height: 178rpx; margin-bottom: 34rpx; padding: 25rpx 23rpx; align-items: center; border-color: #edcdc6; background: linear-gradient(135deg,#fffdfa 0%,#ffede8 100%); box-shadow: 0 12rpx 32rpx rgba(151,81,68,.09); }
+.together-card::after { position: absolute; width: 170rpx; height: 170rpx; right: -72rpx; bottom: -98rpx; border-radius: 50%; background: rgba(236,148,128,.12); content: ''; pointer-events: none; }
+.together-card--pressed { opacity: .72; }
+.together-card__icon { position: relative; z-index: 1; display: flex; width: 76rpx; height: 76rpx; flex: none; align-items: center; justify-content: center; border-radius: 26rpx; background: #ffddd4; color: #aa5349; }
+.together-card__content { position: relative; z-index: 1; min-width: 0; flex: 1; margin-left: 19rpx; }
+.together-card__top,.together-card__meta { display: flex; align-items: center; justify-content: space-between; }
+.together-card__label { color: #7e6a65; font-size: 21rpx; }
+.together-card__edit { color: #a35f55; font-size: 19rpx; font-weight: 650; }
+.together-card__duration { display: flex; min-height: 61rpx; gap: 4rpx; margin-top: 2rpx; align-items: baseline; color: #a84f45; white-space: nowrap; }
+.together-card__number { font-size: 38rpx; font-weight: 800; line-height: 1.35; }
+.together-card__unit { margin-right: 2rpx; color: #6e5b57; font-size: 20rpx; font-weight: 650; }
+.together-card__meta { gap: 12rpx; color: #897873; font-size: 18rpx; line-height: 1.4; }
+.together-card__meta text:last-child { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
+.together-card__content--empty { display: flex; min-height: 76rpx; flex-direction: column; justify-content: center; }
+.together-card__empty-title,.together-card__empty-desc { display: block; }
+.together-card__empty-title { color: #4c3c39; font-size: 27rpx; font-weight: 750; }
+.together-card__empty-desc { margin-top: 7rpx; color: #887773; font-size: 20rpx; }
+.together-card__chevron { position: relative; z-index: 1; display: flex; width: 34rpx; height: 44rpx; flex: none; margin-left: 10rpx; align-items: center; justify-content: center; }
 .special-days-heading { margin-top: 4rpx; }
 .special-days-heading__main,.special-days-heading__meta { display: flex; align-items: center; }
 .special-days-heading__main { gap: 14rpx; justify-content: flex-start; }
