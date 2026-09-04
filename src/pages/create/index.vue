@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
+import LoadingIndicator from '@/components/LoadingIndicator.vue'
 import MoodMark from '@/components/MoodMark.vue'
 import { useArchiveStore } from '@/stores/archive'
 import type { MoodKind, Visibility } from '@/types/domain'
 import { todayString } from '@/utils/date'
-import { createMood, deletePendingMoodImage, uploadMoodImage } from '@/api/moods'
+import { createMood, deletePendingMoodImage, getMoodDetail, updateMood, uploadMoodImage } from '@/api/moods'
 
 type DraftImageStatus = 'compressing' | 'ready' | 'uploading' | 'uploaded' | 'failed' | 'removing'
 
@@ -16,6 +17,7 @@ interface DraftImage {
   status: DraftImageStatus
   uploadedId?: string
   error?: string
+  existing?: boolean
 }
 
 const maxMoodImages = 3
@@ -33,6 +35,9 @@ const selectingImages = ref(false)
 const draftImages = ref<DraftImage[]>([])
 const publishStage = ref<'idle' | 'uploading' | 'creating'>('idle')
 const uploadingNumber = ref(0)
+const editRecordId = ref('')
+const initialLoading = ref(false)
+const initialError = ref('')
 
 const emotionOptions: Record<MoodKind, string[]> = {
   happy: ['愉快', '安心', '期待', '感动', '兴奋', '被爱'],
@@ -40,6 +45,7 @@ const emotionOptions: Record<MoodKind, string[]> = {
 }
 
 const characterCount = computed(() => content.value.length)
+const isEditing = computed(() => Boolean(editRecordId.value))
 const remainingImageCount = computed(() => maxMoodImages - draftImages.value.length)
 const imageBusy = computed(() => draftImages.value.some((image) => ['compressing', 'uploading', 'removing'].includes(image.status)))
 const canPublish = computed(() => (
@@ -52,14 +58,52 @@ const canPublish = computed(() => (
 const imageHint = computed(() => {
   if (publishStage.value === 'uploading') return `正在上传第 ${uploadingNumber.value} 张照片…`
   if (draftImages.value.some((image) => image.status === 'failed')) return '有照片上传失败，再次发布会从这里继续'
-  if (draftImages.value.length && draftImages.value.every((image) => image.status === 'uploaded')) return '照片已上传，发布失败也无需重复上传'
+  if (isEditing.value && draftImages.value.length && draftImages.value.every((image) => image.existing)) return '可以保留、移除或继续添加照片'
+  if (draftImages.value.length && draftImages.value.every((image) => image.status === 'uploaded')) return '照片已上传，保存失败也无需重复上传'
   return '最多 3 张，单张不超过 3MB'
 })
 const publishLabel = computed(() => {
-  if (!store.user.isLoggedIn) return '登录后收藏这一刻'
+  if (!store.user.isLoggedIn) return isEditing.value ? '登录后保存修改' : '登录后收藏这一刻'
   if (publishStage.value === 'uploading') return `正在上传照片 ${uploadingNumber.value}/${draftImages.value.length}…`
-  if (publishing.value) return '正在收藏…'
-  return '收藏这一刻'
+  if (publishing.value) return isEditing.value ? '正在保存…' : '正在收藏…'
+  return isEditing.value ? '保存修改' : '收藏这一刻'
+})
+
+const loadEditingMood = async () => {
+  if (!editRecordId.value) return
+  initialLoading.value = true
+  initialError.value = ''
+  try {
+    const record = await getMoodDetail(editRecordId.value, store.user.id)
+    if (record.authorId !== 'me') throw new Error('你只能编辑自己发布的心情')
+    mood.value = record.mood
+    emotion.value = record.emotion
+    content.value = record.content
+    recordDate.value = record.recordDate
+    visibility.value = record.visibility
+    allowComments.value = record.allowComments
+    draftImages.value = record.images.map((image) => ({
+      localId: `existing-${image.id}`,
+      filePath: image.url,
+      status: 'uploaded',
+      uploadedId: image.id,
+      existing: true,
+    }))
+    if (!store.activeRelationship || record.relationshipId !== store.activeRelationship.id) {
+      visibility.value = 'private'
+    }
+  } catch (error) {
+    initialError.value = error instanceof Error ? error.message : '心情内容加载失败'
+  } finally {
+    initialLoading.value = false
+  }
+}
+
+onLoad((query) => {
+  editRecordId.value = String(query?.id || '')
+  if (!editRecordId.value) return
+  uni.setNavigationBarTitle({ title: '编辑心情' })
+  void loadEditingMood()
 })
 
 onShow(() => {
@@ -165,7 +209,7 @@ const imageStatusLabel = (status: DraftImageStatus) => ({
 const removeImage = async (image: DraftImage) => {
   if (publishing.value || selectingImages.value || ['compressing', 'uploading', 'removing'].includes(image.status)) return
 
-  if (!image.uploadedId) {
+  if (!image.uploadedId || image.existing) {
     draftImages.value = draftImages.value.filter((item) => item.localId !== image.localId)
     return
   }
@@ -224,7 +268,7 @@ const publish = async () => {
     publishStage.value = draftImages.value.length ? 'uploading' : 'creating'
     const imageIds = await uploadImages()
     publishStage.value = 'creating'
-    const record = await createMood({
+    const input = {
       mood: mood.value,
       emotion: emotion.value,
       content: content.value.trim(),
@@ -232,16 +276,25 @@ const publish = async () => {
       visibility: visibility.value,
       allowComments: visibility.value === 'partner' && allowComments.value,
       imageIds,
-    }, store.user.id)
-    store.prependRecord(record)
-    content.value = ''
-    draftImages.value = []
-    recordDate.value = todayString()
-    uni.showToast({ title: '这一刻已被收藏', icon: 'success' })
-    setTimeout(() => uni.switchTab({ url: '/pages/index/index' }), 650)
+    }
+    const record = isEditing.value
+      ? await updateMood(editRecordId.value, input, store.user.id)
+      : await createMood(input, store.user.id)
+    if (isEditing.value) {
+      store.upsertRecord(record)
+      uni.showToast({ title: '心情已更新', icon: 'success' })
+      setTimeout(() => uni.navigateBack(), 650)
+    } else {
+      store.prependRecord(record)
+      content.value = ''
+      draftImages.value = []
+      recordDate.value = todayString()
+      uni.showToast({ title: '这一刻已被收藏', icon: 'success' })
+      setTimeout(() => uni.switchTab({ url: '/pages/index/index' }), 650)
+    }
   } catch (error) {
     uni.showToast({
-      title: error instanceof Error ? error.message : '发布失败，请稍后重试',
+      title: error instanceof Error ? error.message : isEditing.value ? '保存失败，请稍后重试' : '发布失败，请稍后重试',
       icon: 'none',
       duration: 2500,
     })
@@ -254,11 +307,21 @@ const publish = async () => {
 </script>
 
 <template>
-  <view class="page-shell create-page">
+  <view v-if="initialLoading" class="page-shell">
+    <view class="empty-state card"><LoadingIndicator text="正在打开这份心情…" /></view>
+  </view>
+  <view v-else-if="initialError" class="page-shell">
+    <view class="empty-state card">
+      <text class="empty-state__title">暂时无法编辑</text>
+      <text class="empty-state__desc">{{ initialError }}</text>
+      <view class="edit-retry" hover-class="tap-muted" role="button" @tap="loadEditingMood">重新加载</view>
+    </view>
+  </view>
+  <view v-else class="page-shell create-page">
     <view class="create-head">
       <text class="eyebrow">A MOMENT FOR YOU</text>
-      <text class="create-head__title">此刻，你感觉怎么样？</text>
-      <text class="create-head__desc">没有标准答案，诚实地陪陪自己就好。</text>
+      <text class="create-head__title">{{ isEditing ? '重新整理这一刻' : '此刻，你感觉怎么样？' }}</text>
+      <text class="create-head__desc">{{ isEditing ? '修改后，可见的人也会看到更新后的内容。' : '没有标准答案，诚实地陪陪自己就好。' }}</text>
     </view>
 
     <view class="mood-switch">
@@ -425,4 +488,5 @@ const publish = async () => {
 .publish { margin-top: 32rpx; }
 .publish--disabled { opacity: .48; box-shadow: none; }
 .privacy-note { display: flex; gap: 8rpx; margin-top: 18rpx; align-items: center; justify-content: center; color: #9a8b87; font-size: 21rpx; }
+.edit-retry { display: flex; width: 196rpx; min-height: 72rpx; margin: 24rpx auto 0; align-items: center; justify-content: center; border-radius: 20rpx; background: #d87263; color: #fff; font-size: 23rpx; font-weight: 700; }
 </style>

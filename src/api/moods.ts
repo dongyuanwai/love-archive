@@ -199,6 +199,26 @@ export async function createMood(input: CreateMoodInput, currentUserId?: string)
   return toMoodRecord(record, currentUserId)
 }
 
+export async function updateMood(id: string, input: CreateMoodInput, currentUserId?: string): Promise<MoodRecord> {
+  const record = await apiRequest<ApiMoodRecord>({
+    path: `/moods/${encodeURIComponent(id)}`,
+    method: 'PUT',
+    data: {
+      ...input,
+      mood: input.mood.toUpperCase(),
+      visibility: input.visibility.toUpperCase(),
+    },
+  })
+  return toMoodRecord(record, currentUserId)
+}
+
+export function deleteMood(id: string): Promise<{ success: boolean }> {
+  return apiRequest<{ success: boolean }>({
+    path: `/moods/${encodeURIComponent(id)}`,
+    method: 'DELETE',
+  })
+}
+
 export async function listMoods(
   options: { page?: number; pageSize?: number; scope?: MoodListScope } = {},
   currentUserId?: string,

@@ -119,6 +119,9 @@ export const useArchiveStore = defineStore('archive', {
       if (index === -1) this.records.unshift(record)
       else this.records[index] = record
     },
+    removeRecord(id: string) {
+      this.records = this.records.filter((record) => record.id !== id)
+    },
     setCurrentRelationship(result: CurrentRelationshipResponse) {
       if (!result.active || !result.relationship?.partner) {
         this.relationship = createEmptyRelationship()

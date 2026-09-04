@@ -6,7 +6,7 @@ import LoadingIndicator from '@/components/LoadingIndicator.vue'
 import MoodMark from '@/components/MoodMark.vue'
 import { useArchiveStore } from '@/stores/archive'
 import { formatDateTime } from '@/utils/date'
-import { getMoodDetail } from '@/api/moods'
+import { deleteMood, getMoodDetail } from '@/api/moods'
 import { addReaction, removeReaction } from '@/api/reactions'
 import { createComment, deleteComment as requestDeleteComment, editComment as requestEditComment } from '@/api/comments'
 
@@ -22,6 +22,7 @@ const detailError = ref('')
 const reactionLoading = ref(false)
 const commentSaving = ref(false)
 const commentDeletingId = ref('')
+const deletingRecord = ref(false)
 
 const previewImages = (index: number) => {
   const urls = record.value?.images.map((image) => image.url).filter(Boolean) || []
@@ -123,6 +124,34 @@ const removeComment = (commentId: string) => {
   })
 }
 
+const openEditMood = () => {
+  if (!record.value || record.value.authorId !== 'me' || deletingRecord.value) return
+  uni.navigateTo({ url: `/pages/create/index?id=${encodeURIComponent(record.value.id)}` })
+}
+
+const removeMood = () => {
+  if (!record.value || record.value.authorId !== 'me' || deletingRecord.value) return
+  uni.showModal({
+    title: '删除这条心情？',
+    content: '删除后，对方也将无法查看，相关评论、回应和照片会一并删除，且无法恢复。',
+    confirmText: '删除',
+    confirmColor: '#c9574d',
+    success: async (result) => {
+      if (!result.confirm || deletingRecord.value) return
+      deletingRecord.value = true
+      try {
+        await deleteMood(recordId.value)
+        store.removeRecord(recordId.value)
+        uni.showToast({ title: '心情已删除', icon: 'success' })
+        uni.switchTab({ url: '/pages/index/index' })
+      } catch (error) {
+        uni.showToast({ title: error instanceof Error ? error.message : '心情删除失败', icon: 'none' })
+        deletingRecord.value = false
+      }
+    },
+  })
+}
+
 const toggleReaction = async () => {
   if (!record.value || reactionLoading.value) return
   if (record.value.authorId === 'me') {
@@ -148,12 +177,22 @@ const toggleReaction = async () => {
     <view class="empty-state card"><LoadingIndicator text="正在打开这份心情…" /></view>
   </view>
   <view v-else-if="record" class="page-shell detail-page">
-    <LoadingIndicator v-if="detailRefreshing && !reactionLoading && !commentSaving && !commentDeletingId" class="detail-sync" text="正在同步心情详情" compact />
+    <LoadingIndicator v-if="detailRefreshing && !reactionLoading && !commentSaving && !commentDeletingId && !deletingRecord" class="detail-sync" text="正在同步心情详情" compact />
     <view class="detail-card card" :class="`detail-card--${record.mood}`">
       <view class="detail-card__top">
         <view class="author">
           <view class="avatar" :class="{ 'avatar--partner': record.authorId === 'partner' }"><image v-if="record.authorAvatarUrl || (record.authorId === 'me' && store.user.avatarUrl)" class="avatar__image" :src="record.authorAvatarUrl || store.user.avatarUrl" mode="aspectFill" /><text v-else>{{ record.authorName.slice(-1) }}</text></view>
           <view><text class="author__name">{{ record.authorName }}</text><text class="record-time">{{ formatDateTime(record.createdAt) }}</text></view>
+        </view>
+        <view v-if="record.authorId === 'me'" class="record-owner-actions">
+          <view class="record-owner-action" :class="{ 'record-owner-action--disabled': deletingRecord }" hover-class="record-owner-action--hover" role="button" aria-label="编辑心情" @tap="openEditMood">
+            <AppIcon name="edit" :size="16" />
+            <text>编辑</text>
+          </view>
+          <view class="record-owner-action record-owner-action--delete" :class="{ 'record-owner-action--disabled': deletingRecord }" hover-class="record-owner-action--hover" role="button" aria-label="删除心情" @tap="removeMood">
+            <AppIcon name="trash" :size="16" />
+            <text>{{ deletingRecord ? '删除中' : '删除' }}</text>
+          </view>
         </view>
       </view>
       <view class="mood-center">
@@ -259,6 +298,11 @@ const toggleReaction = async () => {
 .detail-card__top, .author, .visibility, .reaction-card, .reaction, .comment-meta, .comment-box, .comments-closed { display: flex; align-items: center; }
 .detail-card__top { justify-content: space-between; }
 .author { gap: 16rpx; }
+.record-owner-actions { display: flex; flex: none; align-items: center; gap: 10rpx; margin-left: 16rpx; }
+.record-owner-action { display: flex; min-height: 54rpx; padding: 0 15rpx; align-items: center; justify-content: center; gap: 6rpx; box-sizing: border-box; border-radius: 16rpx; background: rgba(255, 255, 255, .72); color: #8d625a; font-size: 20rpx; line-height: 1; }
+.record-owner-action--delete { background: rgba(255, 240, 237, .82); color: #bd5147; }
+.record-owner-action--hover { opacity: .72; }
+.record-owner-action--disabled { opacity: .45; }
 .avatar { display: flex; width: 70rpx; height: 70rpx; align-items: center; justify-content: center; border-radius: 24rpx; background: #f8c6a5; color: #7a4738; font-weight: 700; }
 .avatar--partner { background: #cadbea; color: #4f6880; }
 .avatar__image { display: block; width: 100%; height: 100%; border-radius: inherit; }

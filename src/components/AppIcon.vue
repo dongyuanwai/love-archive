@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-export type AppIconName = 'heart' | 'hug' | 'comment' | 'lock' | 'chevron' | 'calendar' | 'trend' | 'link' | 'plus' | 'more' | 'shield' | 'feedback' | 'document' | 'notification'
+export type AppIconName = 'heart' | 'hug' | 'comment' | 'lock' | 'chevron' | 'calendar' | 'trend' | 'link' | 'plus' | 'more' | 'shield' | 'feedback' | 'document' | 'notification' | 'edit' | 'trash'
 
 defineOptions({
   options: {
@@ -35,6 +35,8 @@ const types: Record<AppIconName, string> = {
   feedback: 'paperplane',
   document: 'list',
   notification: 'notification',
+  edit: 'compose',
+  trash: 'trash',
 }
 
 const type = computed(() => props.name === 'heart' && props.filled ? 'heart-filled' : types[props.name])
